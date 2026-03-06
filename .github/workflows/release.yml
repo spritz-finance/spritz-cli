@@ -47,11 +47,10 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@d0834ad3a60a024346910e522a81b0002bd37fea # v4.3.0
         with:
-          role-to-arn: arn:aws:iam::758848446243:role/spritz-cli-release
+          role-to-assume: arn:aws:iam::758848446243:role/spritz-cli-release
           aws-region: us-east-1
           role-duration-seconds: 900
           role-session-name: spritz-cli-release-${{ github.run_id }}
-          allowed-account-ids: 758848446243
           inline-session-policy: >-
             {
               "Version": "2012-10-17",
