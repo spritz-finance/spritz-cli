@@ -1,0 +1,7 @@
+{
+  "email": "cmd@example.com",
+  "envVarActive": false,
+  "firstName": "Cmd",
+  "mode": "stored_credentials",
+  "storage": "__STORAGE__"
+}

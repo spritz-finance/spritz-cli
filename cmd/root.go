@@ -43,7 +43,7 @@ var rootCmd = &cobra.Command{
 
 		// Non-blocking update check (skip for version/update commands)
 		name := cmd.Name()
-		if name != "version" && name != "update" {
+		if name != "version" && name != "update" && name != "login" && name != "logout" {
 			go func() {
 				if latest := update.Check(version); latest != "" {
 					updateNotice = latest
@@ -65,6 +65,9 @@ func init() {
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(whoamiCmd)
 	rootCmd.AddCommand(bankaccounts.Cmd)
 }
 

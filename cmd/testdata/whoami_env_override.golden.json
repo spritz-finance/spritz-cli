@@ -1,0 +1,9 @@
+[
+  {
+    "email": "env@example.com",
+    "envOverride": "true",
+    "firstName": "Env",
+    "source": "environment variable",
+    "storedCredentials": "true"
+  }
+]

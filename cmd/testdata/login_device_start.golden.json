@@ -1,0 +1,9 @@
+{
+  "deviceStateFile": "__STATE_FILE__",
+  "envVarActive": false,
+  "expiresAt": "__EXPIRES_AT__",
+  "mode": "device_start",
+  "userCode": "ABCD1234",
+  "verificationUri": "https://app.spritz.finance/device",
+  "verificationUriComplete": "https://app.spritz.finance/device?code=ABCD1234"
+}
