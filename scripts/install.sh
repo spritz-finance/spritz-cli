@@ -79,9 +79,19 @@ echo "Checksum verified."
 
 tar -xzf "$TMP/$ARCHIVE" -C "$TMP"
 
+BINARY_PATH=""
+if [ -f "$TMP/spritz" ]; then
+  BINARY_PATH="$TMP/spritz"
+elif [ -f "$TMP/spritz-cli" ]; then
+  BINARY_PATH="$TMP/spritz-cli"
+else
+  echo "Error: release archive did not contain a spritz binary." >&2
+  exit 1
+fi
+
 INSTALL_DIR="${SPRITZ_INSTALL_DIR:-$HOME/.local/bin}"
 mkdir -p "$INSTALL_DIR"
-install -m755 "$TMP/spritz" "$INSTALL_DIR/spritz"
+install -m755 "$BINARY_PATH" "$INSTALL_DIR/spritz"
 
 # Add to PATH if not already there
 SHELL_RC=""
