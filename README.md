@@ -10,6 +10,14 @@ curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location https://
 
 The installer verifies Sigstore-signed release checksums before installing the binary.
 
+## Testing
+
+```bash
+make test
+```
+
+If `go` is not already on your `PATH`, the Makefile falls back to `mise exec -- go`.
+
 ## Authentication
 
 `spritz` supports three auth patterns:
