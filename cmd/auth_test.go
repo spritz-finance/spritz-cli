@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,6 +58,60 @@ func captureStdoutStderr(t *testing.T, fn func() error) (string, string, error) 
 	stderrR.Close()
 
 	return string(stdout), string(stderr), runErr
+}
+
+func assertJSONGolden(t *testing.T, actual string, goldenPath string) {
+	t.Helper()
+
+	expected, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("read golden file: %v", err)
+	}
+
+	normalizedActual := normalizeJSON(t, actual)
+	if strings.TrimSpace(normalizedActual) != strings.TrimSpace(string(expected)) {
+		t.Fatalf("json mismatch\nactual:\n%s\n\nexpected:\n%s", normalizedActual, expected)
+	}
+}
+
+func normalizeJSON(t *testing.T, raw string) string {
+	t.Helper()
+
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		t.Fatalf("actual output was not json: %v\n%s", err, raw)
+	}
+
+	normalized, err := json.MarshalIndent(sortJSONValue(value), "", "  ")
+	if err != nil {
+		t.Fatalf("normalize actual json: %v", err)
+	}
+
+	return string(normalized)
+}
+
+func sortJSONValue(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		out := make(map[string]any, len(x))
+		for _, k := range keys {
+			out[k] = sortJSONValue(x[k])
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, item := range x {
+			out[i] = sortJSONValue(item)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 func resetLoginFlags(t *testing.T) {
@@ -148,12 +203,13 @@ func TestLoginCmdDeviceStartWritesJSONToStdout(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 		t.Fatalf("stdout was not json: %v\n%s", err, stdout)
 	}
-	if got["mode"] != "device_start" {
-		t.Fatalf("expected mode=device_start, got %#v", got["mode"])
+	got["deviceStateFile"] = "__STATE_FILE__"
+	got["expiresAt"] = "__EXPIRES_AT__"
+	normalized, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal normalized login start json: %v", err)
 	}
-	if got["deviceStateFile"] != stateFile {
-		t.Fatalf("expected deviceStateFile %q, got %#v", stateFile, got["deviceStateFile"])
-	}
+	assertJSONGolden(t, string(normalized), "testdata/login_device_start.golden.json")
 }
 
 func TestLoginCmdJSONDoesNotPrintHumanSuccessToStderr(t *testing.T) {
@@ -193,12 +249,12 @@ func TestLoginCmdJSONDoesNotPrintHumanSuccessToStderr(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 		t.Fatalf("stdout was not json: %v\n%s", err, stdout)
 	}
-	if got["mode"] != "stored_credentials" {
-		t.Fatalf("expected mode=stored_credentials, got %#v", got["mode"])
+	got["storage"] = "__STORAGE__"
+	normalized, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal normalized login success json: %v", err)
 	}
-	if got["email"] != "cmd@example.com" {
-		t.Fatalf("expected email cmd@example.com, got %#v", got["email"])
-	}
+	assertJSONGolden(t, string(normalized), "testdata/login_json_success.golden.json")
 }
 
 func TestLogoutCmdJSONNoStoredCredentials(t *testing.T) {
@@ -215,14 +271,7 @@ func TestLogoutCmdJSONNoStoredCredentials(t *testing.T) {
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-
-	var got map[string]any
-	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
-		t.Fatalf("stdout was not json: %v\n%s", err, stdout)
-	}
-	if got["removedStoredCredentials"] != false {
-		t.Fatalf("expected removedStoredCredentials=false, got %#v", got["removedStoredCredentials"])
-	}
+	assertJSONGolden(t, stdout, "testdata/logout_json_no_credentials.golden.json")
 }
 
 func TestWhoamiCmdJSONShowsEnvSource(t *testing.T) {
@@ -266,6 +315,7 @@ func TestWhoamiCmdJSONShowsEnvSource(t *testing.T) {
 	if rows[0]["storedCredentials"] != "false" {
 		t.Fatalf("expected storedCredentials=false, got %q", rows[0]["storedCredentials"])
 	}
+	assertJSONGolden(t, buf.String(), "testdata/whoami_env_source.golden.json")
 }
 
 func TestWhoamiCmdJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) {
@@ -309,4 +359,5 @@ func TestWhoamiCmdJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) {
 	if rows[0]["storedCredentials"] != "true" {
 		t.Fatalf("expected storedCredentials=true, got %q", rows[0]["storedCredentials"])
 	}
+	assertJSONGolden(t, buf.String(), "testdata/whoami_env_override.golden.json")
 }
