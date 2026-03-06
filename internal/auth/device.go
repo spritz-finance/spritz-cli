@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/spritz-finance/spritz-cli/internal/config"
 )
 
 // DeviceState is persisted between --device-start and --device-complete.
@@ -19,18 +17,15 @@ type DeviceState struct {
 	Interval                int    `json:"interval"`
 	ExpiresAt               string `json:"expiresAt"`
 }
-
-func deviceStatePath() string {
-	return filepath.Join(config.Dir(), "device-auth-pending.json")
-}
-
 // SaveDeviceState writes pending device auth state to disk.
-func SaveDeviceState(state *DeviceState) error {
+func SaveDeviceState(path string, state *DeviceState) error {
 	data, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}
-	path := deviceStatePath()
+	if path == "" {
+		return fmt.Errorf("device state file is required")
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
@@ -39,8 +34,11 @@ func SaveDeviceState(state *DeviceState) error {
 
 // LoadDeviceState reads pending device auth state from disk.
 // Returns nil if no pending state exists.
-func LoadDeviceState() (*DeviceState, error) {
-	data, err := os.ReadFile(deviceStatePath())
+func LoadDeviceState(path string) (*DeviceState, error) {
+	if path == "" {
+		return nil, fmt.Errorf("device state file is required")
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -53,17 +51,20 @@ func LoadDeviceState() (*DeviceState, error) {
 	}
 	expires, err := time.Parse(time.RFC3339, state.ExpiresAt)
 	if err != nil {
-		ClearDeviceState()
+		ClearDeviceState(path)
 		return nil, fmt.Errorf("corrupt device auth state — cleared")
 	}
 	if time.Now().After(expires) {
-		ClearDeviceState()
+		ClearDeviceState(path)
 		return nil, fmt.Errorf("device code expired — run 'spritz login --device-start' again")
 	}
 	return &state, nil
 }
 
 // ClearDeviceState removes any pending device auth state.
-func ClearDeviceState() {
-	os.Remove(deviceStatePath())
+func ClearDeviceState(path string) {
+	if path == "" {
+		return
+	}
+	os.Remove(path)
 }

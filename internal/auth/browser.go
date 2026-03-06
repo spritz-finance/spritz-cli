@@ -72,7 +72,7 @@ func DeviceAuth(ctx context.Context) (*DeviceTokenResponse, error) {
 
 // DeviceStart initiates the device flow, persists state, and returns immediately.
 // The caller should present the URL to the user, then later call DeviceComplete.
-func DeviceStart(ctx context.Context) (*DeviceState, error) {
+func DeviceStart(ctx context.Context, stateFile string) (*DeviceState, error) {
 	baseURL := config.APIURL()
 
 	auth, err := requestDeviceCode(ctx, baseURL)
@@ -91,7 +91,7 @@ func DeviceStart(ctx context.Context) (*DeviceState, error) {
 		ExpiresAt:               expiresAt.Format(time.RFC3339),
 	}
 
-	if err := SaveDeviceState(state); err != nil {
+	if err := SaveDeviceState(stateFile, state); err != nil {
 		return nil, fmt.Errorf("failed to save device auth state: %w", err)
 	}
 
@@ -99,13 +99,13 @@ func DeviceStart(ctx context.Context) (*DeviceState, error) {
 }
 
 // DeviceComplete loads persisted state and polls for approval.
-func DeviceComplete(ctx context.Context) (*DeviceTokenResponse, error) {
-	state, err := LoadDeviceState()
+func DeviceComplete(ctx context.Context, stateFile string) (*DeviceTokenResponse, error) {
+	state, err := LoadDeviceState(stateFile)
 	if err != nil {
 		return nil, err
 	}
 	if state == nil {
-		return nil, fmt.Errorf("no pending device authorization — run 'spritz login --device-start' first")
+		return nil, fmt.Errorf("no pending device authorization at %q — run 'spritz login --device-start --device-state-file %s' first", stateFile, stateFile)
 	}
 
 	baseURL := config.APIURL()
@@ -118,7 +118,7 @@ func DeviceComplete(ctx context.Context) (*DeviceTokenResponse, error) {
 		return nil, err
 	}
 
-	ClearDeviceState()
+	ClearDeviceState(stateFile)
 	return token, nil
 }
 

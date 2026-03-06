@@ -17,6 +17,7 @@ type LoginOptions struct {
 	APIKey           string // If set, skip interactive prompts (works without TTY)
 	DeviceStart      bool   // Just initiate device flow and exit
 	DeviceComplete   bool   // Complete a previously started device flow
+	DeviceStateFile  string // Explicit state path for two-step device flow
 }
 
 type LoginResult struct {
@@ -29,6 +30,7 @@ type LoginResult struct {
 	VerificationURI         string `json:"verificationUri,omitempty"`
 	VerificationURIComplete string `json:"verificationUriComplete,omitempty"`
 	ExpiresAt               string `json:"expiresAt,omitempty"`
+	DeviceStateFile         string `json:"deviceStateFile,omitempty"`
 }
 
 // Login runs the login flow. Interactive prompts require a TTY;
@@ -36,7 +38,10 @@ type LoginResult struct {
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	// Two-step device flow: start
 	if opts.DeviceStart {
-		state, err := DeviceStart(ctx)
+		if opts.DeviceStateFile == "" {
+			return nil, fmt.Errorf("--device-state-file is required with --device-start")
+		}
+		state, err := DeviceStart(ctx, opts.DeviceStateFile)
 		if err != nil {
 			return nil, err
 		}
@@ -47,12 +52,16 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 			VerificationURI:         state.VerificationURI,
 			VerificationURIComplete: state.VerificationURIComplete,
 			ExpiresAt:               state.ExpiresAt,
+			DeviceStateFile:         opts.DeviceStateFile,
 		}, nil
 	}
 
 	// Two-step device flow: complete
 	if opts.DeviceComplete {
-		token, err := DeviceComplete(ctx)
+		if opts.DeviceStateFile == "" {
+			return nil, fmt.Errorf("--device-state-file is required with --device-complete")
+		}
+		token, err := DeviceComplete(ctx, opts.DeviceStateFile)
 		if err != nil {
 			return nil, err
 		}

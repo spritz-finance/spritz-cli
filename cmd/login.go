@@ -30,8 +30,8 @@ Examples:
   spritz login --api-key ak_...
 
   # Two-step device flow (for AI agents and automation)
-  spritz login --device-start       # outputs JSON: {"userCode","verificationUriComplete",...}
-  spritz login --device-complete --json  # completes the pending local device session
+  spritz login --device-start --device-state-file /tmp/spritz-device.json
+  spritz login --device-complete --device-state-file /tmp/spritz-device.json --json
 
   # Structured success output
   spritz login --json
@@ -43,6 +43,7 @@ Examples:
 		allowFile, _ := cmd.Flags().GetBool("allow-file-storage")
 		deviceStart, _ := cmd.Flags().GetBool("device-start")
 		deviceComplete, _ := cmd.Flags().GetBool("device-complete")
+		deviceStateFile, _ := cmd.Flags().GetString("device-state-file")
 		jsonOut, _ := cmd.Flags().GetBool("json")
 
 		result, err := auth.Login(cmd.Context(), auth.LoginOptions{
@@ -50,6 +51,7 @@ Examples:
 			APIKey:           apiKey,
 			DeviceStart:      deviceStart,
 			DeviceComplete:   deviceComplete,
+			DeviceStateFile:  deviceStateFile,
 		})
 		if err != nil {
 			return err
@@ -87,6 +89,8 @@ func init() {
 	loginCmd.Flags().Bool("device-start", false,
 		"Initiate device authorization and print JSON to stdout")
 	loginCmd.Flags().Bool("device-complete", false,
-		"Complete a previously started device authorization from local pending state")
+		"Complete a previously started device authorization")
+	loginCmd.Flags().String("device-state-file", "",
+		"Path to the device authorization state file used by --device-start/--device-complete")
 	loginCmd.MarkFlagsMutuallyExclusive("api-key", "device-start", "device-complete")
 }

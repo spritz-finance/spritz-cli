@@ -16,11 +16,11 @@ Default `spritz login` opens a browser-based device flow and stores the resultin
 ### Agents and Headless Environments
 
 ```bash
-spritz login --device-start
-spritz login --device-complete --json
+spritz login --device-start --device-state-file /tmp/spritz-device.json
+spritz login --device-complete --device-state-file /tmp/spritz-device.json --json
 ```
 
-`--device-complete` uses the pending local device session created by `--device-start` in the active config directory.
+`--device-start` and `--device-complete` share an explicit state file. This avoids hidden ambient state and makes parallel agent sessions safe.
 
 `--device-start` prints JSON to stdout:
 
@@ -28,6 +28,7 @@ spritz login --device-complete --json
 {
   "mode": "device_start",
   "envVarActive": false,
+  "deviceStateFile": "/tmp/spritz-device.json",
   "userCode": "ABCD1234",
   "verificationUri": "https://app.spritz.finance/device",
   "verificationUriComplete": "https://app.spritz.finance/device?code=ABCD1234",
@@ -74,6 +75,7 @@ printf '%s' "$SPRITZ_API_KEY" | spritz login
 
 - `spritz login` is interactive and requires a TTY.
 - `spritz login --device-start` is machine-readable and writes JSON to stdout.
+- `spritz login --device-start` and `--device-complete` require the same `--device-state-file` path.
 - `spritz login --json` and `spritz logout --json` write structured JSON to stdout for automation.
 - Human-oriented status and warnings are written to stderr where possible.
 - `spritz whoami` shows the active user plus the credential source.

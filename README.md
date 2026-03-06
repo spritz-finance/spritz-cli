@@ -25,8 +25,8 @@ The installer verifies Sigstore-signed release checksums before installing the b
 spritz login
 
 # Agent/headless flow
-spritz login --device-start
-spritz login --device-complete --json
+spritz login --device-start --device-state-file /tmp/spritz-device.json
+spritz login --device-complete --device-state-file /tmp/spritz-device.json --json
 
 # Secret-manager or CI flow
 export SPRITZ_API_KEY=ak_...
@@ -37,6 +37,7 @@ spritz whoami -o json
 
 - Prefer `SPRITZ_API_KEY` from a secrets manager for CI and automation.
 - Prefer stdin over `--api-key` when passing a key directly, since argv may be captured in shell history or process lists.
+- Prefer an explicit `--device-state-file` for two-step device auth; avoid relying on ambient local state.
 - Stored credentials live in the system keychain by default. Use `--allow-file-storage` only when keychain access is unavailable.
 - `SPRITZ_API_KEY` always takes precedence over stored credentials.
 
