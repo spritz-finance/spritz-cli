@@ -40,35 +40,24 @@ type DeviceTokenResponse struct {
 	KeyName     *string  `json:"keyName"`
 }
 
-type deviceErrorResponse struct {
-	Error string `json:"error"`
+// problemDetailResponse matches RFC 9457 error format used by the Spritz API.
+type problemDetailResponse struct {
+	Detail string `json:"detail"`
+	Title  string `json:"title"`
+	Status int    `json:"status"`
 }
 
-// DeviceAuth runs the device authorization flow (RFC 8628-style).
+// DeviceAuth runs the full device authorization flow (RFC 8628-style).
 // It requests a device code, opens the browser for user approval,
 // and polls until the user approves or the code expires.
 // Returns the full token response so callers can store metadata.
 func DeviceAuth(ctx context.Context) (*DeviceTokenResponse, error) {
 	baseURL := config.APIURL()
 
-	// Step 1: Request device code
 	auth, err := requestDeviceCode(ctx, baseURL)
 	if err != nil {
 		return nil, err
 	}
-
-	interval := time.Duration(auth.Interval) * time.Second
-	if interval < minPollInterval {
-		interval = minPollInterval
-	}
-
-	timeout := time.Duration(auth.ExpiresIn) * time.Second
-	if timeout <= 0 || timeout > deviceFlowTimeout {
-		timeout = deviceFlowTimeout
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	// Always show the code and URL — helps SSH, tmux, headless, wrong browser profile
 	fmt.Fprintf(os.Stderr, "Your code: %s\n", auth.UserCode)
@@ -78,7 +67,75 @@ func DeviceAuth(ctx context.Context) (*DeviceTokenResponse, error) {
 	}
 	fmt.Fprintln(os.Stderr, "Waiting for approval...")
 
-	// Step 4: Poll for token
+	return pollUntilComplete(ctx, baseURL, auth.DeviceCode, auth.Interval, auth.ExpiresIn)
+}
+
+// DeviceStart initiates the device flow, persists state, and returns immediately.
+// The caller should present the URL to the user, then later call DeviceComplete.
+func DeviceStart(ctx context.Context) (*DeviceState, error) {
+	baseURL := config.APIURL()
+
+	auth, err := requestDeviceCode(ctx, baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	expiresAt := time.Now().Add(time.Duration(auth.ExpiresIn) * time.Second)
+
+	state := &DeviceState{
+		DeviceCode:              auth.DeviceCode,
+		UserCode:                auth.UserCode,
+		VerificationURI:         auth.VerificationURI,
+		VerificationURIComplete: auth.VerificationURIComplete,
+		Interval:                auth.Interval,
+		ExpiresAt:               expiresAt.Format(time.RFC3339),
+	}
+
+	if err := SaveDeviceState(state); err != nil {
+		return nil, fmt.Errorf("failed to save device auth state: %w", err)
+	}
+
+	return state, nil
+}
+
+// DeviceComplete loads persisted state and polls for approval.
+func DeviceComplete(ctx context.Context) (*DeviceTokenResponse, error) {
+	state, err := LoadDeviceState()
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return nil, fmt.Errorf("no pending device authorization — run 'spritz login --device-start' first")
+	}
+
+	baseURL := config.APIURL()
+
+	expiresAt, _ := time.Parse(time.RFC3339, state.ExpiresAt)
+	expiresIn := int(time.Until(expiresAt).Seconds())
+
+	token, err := pollUntilComplete(ctx, baseURL, state.DeviceCode, state.Interval, expiresIn)
+	if err != nil {
+		return nil, err
+	}
+
+	ClearDeviceState()
+	return token, nil
+}
+
+func pollUntilComplete(ctx context.Context, baseURL, deviceCode string, intervalSec, expiresInSec int) (*DeviceTokenResponse, error) {
+	interval := time.Duration(intervalSec) * time.Second
+	if interval < minPollInterval {
+		interval = minPollInterval
+	}
+
+	timeout := time.Duration(expiresInSec) * time.Second
+	if timeout <= 0 || timeout > deviceFlowTimeout {
+		timeout = deviceFlowTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -87,7 +144,7 @@ func DeviceAuth(ctx context.Context) (*DeviceTokenResponse, error) {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("authentication timed out")
 		case <-ticker.C:
-			token, err := pollDeviceToken(ctx, baseURL, auth.DeviceCode)
+			token, err := pollDeviceToken(ctx, baseURL, deviceCode)
 			if err == errAuthPending {
 				continue
 			}
@@ -97,6 +154,9 @@ func DeviceAuth(ctx context.Context) (*DeviceTokenResponse, error) {
 				continue
 			}
 			if err != nil {
+				if ctx.Err() != nil {
+					return nil, fmt.Errorf("authentication timed out")
+				}
 				return nil, err
 			}
 			return token, nil
@@ -113,7 +173,7 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 
 func requestDeviceCode(ctx context.Context, baseURL string) (*deviceAuthResponse, error) {
 	body, _ := json.Marshal(map[string]string{"client_id": "spritz-cli"})
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/device/authorize", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/device/authorize", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -144,7 +204,7 @@ func pollDeviceToken(ctx context.Context, baseURL, deviceCode string) (*DeviceTo
 		"device_code": deviceCode,
 		"grant_type":  "urn:ietf:params:oauth:grant-type:device_code",
 	})
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/device/token", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/device/token", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -167,12 +227,12 @@ func pollDeviceToken(ctx context.Context, baseURL, deviceCode string) (*DeviceTo
 		return &token, nil
 	}
 
-	var errResp deviceErrorResponse
-	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+	var problem problemDetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&problem); err != nil {
 		return nil, fmt.Errorf("device token request failed (HTTP %d)", resp.StatusCode)
 	}
 
-	switch errResp.Error {
+	switch problem.Detail {
 	case "authorization_pending":
 		return nil, errAuthPending
 	case "slow_down":
@@ -180,6 +240,6 @@ func pollDeviceToken(ctx context.Context, baseURL, deviceCode string) (*DeviceTo
 	case "expired_token":
 		return nil, fmt.Errorf("device code expired — please try again")
 	default:
-		return nil, fmt.Errorf("device token error: %s", errResp.Error)
+		return nil, fmt.Errorf("device token error: %s", problem.Detail)
 	}
 }

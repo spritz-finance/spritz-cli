@@ -27,7 +27,7 @@ func TestDeviceAuth_Success(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/device/authorize":
+		case "/v1/device/authorize":
 			json.NewEncoder(w).Encode(deviceAuthResponse{
 				DeviceCode:              "dc_secret",
 				UserCode:                "ABCD1234",
@@ -36,10 +36,10 @@ func TestDeviceAuth_Success(t *testing.T) {
 				ExpiresIn:               600,
 				Interval:                1, // fast for testing
 			})
-		case "/device/token":
+		case "/v1/device/token":
 			if pollCount.Add(1) < 3 {
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(deviceErrorResponse{Error: "authorization_pending"})
+				json.NewEncoder(w).Encode(problemDetailResponse{Detail: "authorization_pending"})
 				return
 			}
 			json.NewEncoder(w).Encode(DeviceTokenResponse{
@@ -77,7 +77,7 @@ func TestDeviceAuth_Expired(t *testing.T) {
 	setFastPolling(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/device/authorize":
+		case "/v1/device/authorize":
 			json.NewEncoder(w).Encode(deviceAuthResponse{
 				DeviceCode:              "dc_secret",
 				UserCode:                "ABCD1234",
@@ -86,9 +86,9 @@ func TestDeviceAuth_Expired(t *testing.T) {
 				ExpiresIn:               600,
 				Interval:                1,
 			})
-		case "/device/token":
+		case "/v1/device/token":
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(deviceErrorResponse{Error: "expired_token"})
+			json.NewEncoder(w).Encode(problemDetailResponse{Detail: "expired_token"})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -115,7 +115,7 @@ func TestDeviceAuth_SlowDown(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/device/authorize":
+		case "/v1/device/authorize":
 			json.NewEncoder(w).Encode(deviceAuthResponse{
 				DeviceCode:              "dc_secret",
 				UserCode:                "TEST5678",
@@ -124,11 +124,11 @@ func TestDeviceAuth_SlowDown(t *testing.T) {
 				ExpiresIn:               600,
 				Interval:                1,
 			})
-		case "/device/token":
+		case "/v1/device/token":
 			n := pollCount.Add(1)
 			if n == 1 {
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(deviceErrorResponse{Error: "slow_down"})
+				json.NewEncoder(w).Encode(problemDetailResponse{Detail: "slow_down"})
 				return
 			}
 			json.NewEncoder(w).Encode(DeviceTokenResponse{
@@ -159,7 +159,7 @@ func TestDeviceAuth_Timeout(t *testing.T) {
 	setFastPolling(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/device/authorize":
+		case "/v1/device/authorize":
 			json.NewEncoder(w).Encode(deviceAuthResponse{
 				DeviceCode:              "dc_secret",
 				UserCode:                "TIMEOUT1",
@@ -168,9 +168,9 @@ func TestDeviceAuth_Timeout(t *testing.T) {
 				ExpiresIn:               2, // 2 seconds
 				Interval:                1,
 			})
-		case "/device/token":
+		case "/v1/device/token":
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(deviceErrorResponse{Error: "authorization_pending"})
+			json.NewEncoder(w).Encode(problemDetailResponse{Detail: "authorization_pending"})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

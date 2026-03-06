@@ -20,7 +20,7 @@ const (
 	accountName = "api_key"
 )
 
-var ErrNotAuthenticated = errors.New("not authenticated. Run 'spritz login' to authenticate")
+var ErrNotAuthenticated = errors.New("not authenticated. Run 'spritz login' or set SPRITZ_API_KEY")
 
 type StorageMethod int
 
@@ -44,27 +44,37 @@ func (m StorageMethod) String() string {
 }
 
 func GetAPIKey() (string, error) {
+	key, method, err := GetAPIKeyWithSource()
+	if err != nil {
+		return "", err
+	}
+	if method == StorageFile {
+		fmt.Fprintln(os.Stderr,
+			"Note: using machine-encrypted credentials file.",
+			"For stronger security, set SPRITZ_API_KEY via a secrets manager.")
+	}
+	return key, nil
+}
+
+func GetAPIKeyWithSource() (string, StorageMethod, error) {
 	if key := os.Getenv("SPRITZ_API_KEY"); key != "" {
-		return key, nil
+		return key, StorageEnv, nil
 	}
 
 	key, err := keyring.Get(serviceName, accountName)
 	if err == nil && key != "" {
-		return key, nil
+		return key, StorageKeychain, nil
 	}
 
 	data, err := os.ReadFile(credentialFilePath())
 	if err == nil {
 		key, err := decryptKey(data)
 		if err == nil {
-			fmt.Fprintln(os.Stderr,
-				"Note: using machine-encrypted credentials file.",
-				"For stronger security, set SPRITZ_API_KEY via a secrets manager.")
-			return key, nil
+			return key, StorageFile, nil
 		}
 	}
 
-	return "", ErrNotAuthenticated
+	return "", StorageMethod(-1), ErrNotAuthenticated
 }
 
 // StoreAPIKey stores the key in the system keychain. If the keychain is

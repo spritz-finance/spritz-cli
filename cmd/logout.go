@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -10,38 +11,52 @@ import (
 
 var logoutCmd = &cobra.Command{
 	Use:   "logout",
-	Short: "Remove stored Spritz credentials and revoke the API key",
+	Short: "Remove locally stored Spritz credentials",
+	Long: `Removes credentials from keychain and encrypted file.
+
+Note: this does not revoke the API key on the server. To revoke it,
+visit https://app.spritz.finance/settings/api-keys.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		envSet := os.Getenv("SPRITZ_API_KEY") != ""
+		hadStored := auth.HasStoredCredentials()
+
 		if os.Getenv("SPRITZ_API_KEY") != "" {
 			fmt.Fprintln(os.Stderr, "Warning: SPRITZ_API_KEY environment variable is set.")
 			fmt.Fprintln(os.Stderr, "Commands will continue to authenticate via the env var.")
 			fmt.Fprintln(os.Stderr, "Unset it to fully log out.")
 		}
 
-		if !auth.HasStoredCredentials() {
+		if !hadStored {
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{
+					"removedStoredCredentials": false,
+					"envVarActive":            envSet,
+					"serverRevocationURL":     "https://app.spritz.finance/settings/api-keys",
+				})
+			}
 			fmt.Println("No stored credentials found.")
 			return nil
-		}
-
-		// Attempt server-side revocation before deleting local credentials
-		keyID := auth.LoadKeyMetadata()
-		if keyID != "" {
-			apiKey, err := auth.GetAPIKey()
-			if err == nil {
-				if err := auth.RevokeAPIKey(apiKey, keyID); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: could not revoke key server-side: %v\n", err)
-					fmt.Fprintln(os.Stderr, "You can revoke it manually at https://app.spritz.finance/settings/api-keys")
-				} else {
-					fmt.Fprintln(os.Stderr, "API key revoked on server.")
-				}
-			}
 		}
 
 		if err := auth.DeleteAPIKey(); err != nil {
 			return fmt.Errorf("failed to remove credentials: %w", err)
 		}
 
+		if jsonOut {
+			return json.NewEncoder(os.Stdout).Encode(map[string]any{
+				"removedStoredCredentials": true,
+				"envVarActive":            envSet,
+				"serverRevocationURL":     "https://app.spritz.finance/settings/api-keys",
+			})
+		}
+
 		fmt.Println("Stored credentials removed.")
+		fmt.Println("To revoke the API key server-side, visit https://app.spritz.finance/settings/api-keys")
 		return nil
 	},
+}
+
+func init() {
+	logoutCmd.Flags().Bool("json", false, "Print structured JSON output for automation")
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -13,28 +14,76 @@ import (
 // LoginOptions controls login behavior.
 type LoginOptions struct {
 	AllowFileStorage bool
+	APIKey           string // If set, skip interactive prompts (works without TTY)
+	DeviceStart      bool   // Just initiate device flow and exit
+	DeviceComplete   bool   // Complete a previously started device flow
 }
 
-// Login runs the interactive login flow. It must be called from a TTY.
-func Login(ctx context.Context, opts LoginOptions) error {
+type LoginResult struct {
+	Mode                    string `json:"mode"`
+	Email                   string `json:"email,omitempty"`
+	FirstName               string `json:"firstName,omitempty"`
+	Storage                 string `json:"storage,omitempty"`
+	EnvVarActive            bool   `json:"envVarActive"`
+	UserCode                string `json:"userCode,omitempty"`
+	VerificationURI         string `json:"verificationUri,omitempty"`
+	VerificationURIComplete string `json:"verificationUriComplete,omitempty"`
+	ExpiresAt               string `json:"expiresAt,omitempty"`
+}
+
+// Login runs the login flow. Interactive prompts require a TTY;
+// pass APIKey in opts to authenticate non-interactively (e.g. piped envs).
+func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
+	// Two-step device flow: start
+	if opts.DeviceStart {
+		state, err := DeviceStart(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &LoginResult{
+			Mode:                    "device_start",
+			EnvVarActive:            os.Getenv("SPRITZ_API_KEY") != "",
+			UserCode:                state.UserCode,
+			VerificationURI:         state.VerificationURI,
+			VerificationURIComplete: state.VerificationURIComplete,
+			ExpiresAt:               state.ExpiresAt,
+		}, nil
+	}
+
+	// Two-step device flow: complete
+	if opts.DeviceComplete {
+		token, err := DeviceComplete(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return storeValidatedKey(token.APIKey, token.KeyID, opts.AllowFileStorage)
+	}
+
+	// Non-interactive: API key provided directly
+	if opts.APIKey != "" {
+		return loginWithKey(opts.APIKey, opts.AllowFileStorage)
+	}
+
+	// API key from stdin pipe (non-TTY, no --api-key flag)
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return fmt.Errorf("login requires an interactive terminal")
+		key, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read from stdin: %w", err)
+		}
+		k := strings.TrimSpace(string(key))
+		if k == "" {
+			return nil, fmt.Errorf("login requires an interactive terminal, stdin, --api-key, or --device-start/--device-complete")
+		}
+		return loginWithKey(k, opts.AllowFileStorage)
 	}
 
-	if envKey := os.Getenv("SPRITZ_API_KEY"); envKey != "" {
-		fmt.Fprintln(os.Stderr, "SPRITZ_API_KEY environment variable is set.")
-		fmt.Fprintln(os.Stderr, "The env var always takes precedence over stored credentials.")
-		fmt.Fprintln(os.Stderr, "Unset it first, then re-run 'spritz login'.")
-		return fmt.Errorf("SPRITZ_API_KEY is set — unset it to use stored credentials")
-	}
-
-	// Check if already logged in
+	// Interactive flow
 	if HasStoredCredentials() {
 		fmt.Print("You are already logged in. Overwrite? [y/N] ")
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		if strings.TrimSpace(strings.ToLower(answer)) != "y" {
-			return nil
+			return &LoginResult{Mode: "skipped", EnvVarActive: os.Getenv("SPRITZ_API_KEY") != ""}, nil
 		}
 	}
 
@@ -54,38 +103,51 @@ func Login(ctx context.Context, opts LoginOptions) error {
 	case "", "1":
 		token, err := DeviceAuth(ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		apiKey = token.APIKey
 		keyID = token.KeyID
 	case "2":
 		fmt.Print("API key: ")
 		keyBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println() // newline after hidden input
+		fmt.Println()
 		if err != nil {
-			return fmt.Errorf("failed to read API key: %w", err)
+			return nil, fmt.Errorf("failed to read API key: %w", err)
 		}
 		apiKey = strings.TrimSpace(string(keyBytes))
 	default:
-		return fmt.Errorf("invalid choice: %s", choice)
+		return nil, fmt.Errorf("invalid choice: %s", choice)
 	}
 
 	if apiKey == "" {
-		return fmt.Errorf("no API key provided")
+		return nil, fmt.Errorf("no API key provided")
 	}
 
+	return storeValidatedKey(apiKey, keyID, opts.AllowFileStorage)
+}
+
+func loginWithKey(apiKey string, allowFile bool) (*LoginResult, error) {
+	return storeValidatedKey(apiKey, "", allowFile)
+}
+
+func storeValidatedKey(apiKey, keyID string, allowFile bool) (*LoginResult, error) {
 	user, err := ValidateAPIKey(apiKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	method, err := StoreAPIKey(apiKey, opts.AllowFileStorage)
+	method, err := StoreAPIKey(apiKey, allowFile)
 	if err != nil {
-		return fmt.Errorf("failed to store credentials: %w", err)
+		return nil, fmt.Errorf("failed to store credentials: %w", err)
 	}
 
 	StoreKeyMetadata(keyID)
 
-	fmt.Printf("Logged in as %s. Key stored in %s.\n", user.Email, method)
-	return nil
+	return &LoginResult{
+		Mode:         "stored_credentials",
+		Email:        user.Email,
+		FirstName:    user.FirstName,
+		Storage:      method.String(),
+		EnvVarActive: os.Getenv("SPRITZ_API_KEY") != "",
+	}, nil
 }
