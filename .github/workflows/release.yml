@@ -1,0 +1,75 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.12'
+          cache: true
+
+      - uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+        with:
+          cosign-release: 'v3.0.5'
+
+      - uses: goreleaser/goreleaser-action@9c156ee8a17a598857849441385a2041ef570552 # v6.3.0
+        with:
+          version: v2.14.1
+          args: release --clean
+        env:
+          COSIGN_YES: "true"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: aws-actions/configure-aws-credentials@d0834ad3a60a024346910e522a81b0002bd37fea # v4.3.0
+        with:
+          role-to-arn: arn:aws:iam::758848446243:role/spritz-cli-release
+          aws-region: us-east-1
+          role-duration-seconds: 900
+          role-session-name: spritz-cli-release-${{ github.run_id }}
+          allowed-account-ids: 758848446243
+          inline-session-policy: >-
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "UploadInstallScript",
+                  "Effect": "Allow",
+                  "Action": "s3:PutObject",
+                  "Resource": "arn:aws:s3:::static.spritz.finance/install.sh"
+                },
+                {
+                  "Sid": "InvalidateCloudFront",
+                  "Effect": "Allow",
+                  "Action": "cloudfront:CreateInvalidation",
+                  "Resource": "arn:aws:cloudfront::758848446243:distribution/E1UTTR84PB76B2"
+                }
+              ]
+            }
+
+      - name: Upload install script to S3
+        run: |
+          aws s3 cp scripts/install.sh s3://static.spritz.finance/install.sh \
+            --content-type "text/plain" \
+            --cache-control "max-age=300" \
+            --only-show-errors
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id E1UTTR84PB76B2 \
+            --paths "/install.sh"
