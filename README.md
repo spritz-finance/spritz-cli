@@ -26,6 +26,33 @@ curl -fsSL https://spritz.finance/install | bash
 
 The installer verifies Sigstore-signed release checksums before installing the binary.
 
+## Breaking Auth Change
+
+The auth command surface has changed.
+
+Old commands:
+
+```bash
+spritz login
+spritz logout
+spritz whoami
+```
+
+New commands:
+
+```bash
+spritz auth login
+spritz auth logout
+spritz auth status
+```
+
+For headless agents, prefer:
+
+```bash
+spritz auth device start
+spritz auth device complete
+```
+
 ## Quickstart
 
 ### For Humans

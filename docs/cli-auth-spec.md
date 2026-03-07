@@ -7,6 +7,26 @@ The CLI has two auth shapes:
 - human-friendly commands under `spritz auth login`
 - agent-friendly device flows under `spritz auth device`
 
+## Breaking Change
+
+The previous top-level auth commands were removed.
+
+Old commands:
+
+```bash
+spritz login
+spritz logout
+spritz whoami
+```
+
+Replacement commands:
+
+```bash
+spritz auth login
+spritz auth logout
+spritz auth status
+```
+
 ## Recommended Flows
 
 ### Humans
