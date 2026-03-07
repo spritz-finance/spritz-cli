@@ -2,41 +2,53 @@
 
 `spritz` supports interactive, headless, and fully non-interactive authentication.
 
+The CLI has two auth shapes:
+
+- human-friendly commands under `spritz auth login`
+- agent-friendly device flows under `spritz auth device`
+
 ## Recommended Flows
 
 ### Humans
 
 ```bash
-spritz login
-spritz whoami
+spritz auth login
+spritz auth status
 ```
 
-Default `spritz login` opens a browser-based device flow and stores the resulting API key locally.
+Default `spritz auth login` opens a browser-based device flow and stores the resulting API key locally.
 
 ### Agents and Headless Environments
 
 ```bash
-spritz login --device-start --device-state-file /tmp/spritz-device.json
-spritz login --device-complete --device-state-file /tmp/spritz-device.json --json
+spritz auth device start
+spritz auth device complete
 ```
 
-`--device-start` and `--device-complete` share an explicit state file. This avoids hidden ambient state and makes parallel agent sessions safe.
-
-`--device-start` prints JSON to stdout:
+`spritz auth device start` creates a unique pending device session automatically and prints JSON to stdout:
 
 ```json
 {
   "mode": "device_start",
   "envVarActive": false,
-  "deviceStateFile": "/tmp/spritz-device.json",
+  "deviceStateFile": "/home/user/.config/spritz/device/device-20260307T120000Z-a1b2c3d4.json",
   "userCode": "ABCD1234",
   "verificationUri": "https://app.spritz.finance/device",
   "verificationUriComplete": "https://app.spritz.finance/device?code=ABCD1234",
-  "expiresAt": "2026-03-06T12:10:00Z"
+  "expiresAt": "2026-03-07T12:10:00Z"
 }
 ```
 
-`--device-complete --json` prints structured success output:
+`spritz auth device complete` completes the only pending session by default. If multiple pending sessions exist, the CLI requires an explicit `--device-state-file`.
+
+Example with explicit state path:
+
+```bash
+spritz auth device start --device-state-file /tmp/spritz-device.json
+spritz auth device complete --device-state-file /tmp/spritz-device.json
+```
+
+Successful completion prints structured JSON to stdout:
 
 ```json
 {
@@ -44,7 +56,8 @@ spritz login --device-complete --device-state-file /tmp/spritz-device.json --jso
   "email": "user@example.com",
   "firstName": "Test",
   "storage": "system keychain",
-  "envVarActive": false
+  "envVarActive": false,
+  "deviceStateFile": "/home/user/.config/spritz/device/device-20260307T120000Z-a1b2c3d4.json"
 }
 ```
 
@@ -52,35 +65,21 @@ spritz login --device-complete --device-state-file /tmp/spritz-device.json --jso
 
 ```bash
 export SPRITZ_API_KEY=ak_...
-spritz whoami -o json
+spritz auth status
 ```
 
 This is the preferred pattern when a secret manager can inject environment variables directly.
 
-## Security Guidance
-
-- Prefer `SPRITZ_API_KEY` or secure stdin over `--api-key`.
-- Treat `--api-key ak_...` as a last resort; command-line arguments may end up in shell history and process inspection tools.
-- Credentials are stored in the system keychain by default.
-- `--allow-file-storage` falls back to a machine-encrypted file when keychain storage is unavailable.
-- `SPRITZ_API_KEY` always overrides stored credentials.
-
-Safer direct-key example:
-
-```bash
-printf '%s' "$SPRITZ_API_KEY" | spritz login
-```
-
 ## CLI Behavior
 
-- `spritz login` is interactive and requires a TTY.
-- `spritz login --device-start` is machine-readable and writes JSON to stdout.
-- `spritz login --device-start` and `--device-complete` require the same `--device-state-file` path.
-- `spritz login --json` and `spritz logout --json` write structured JSON to stdout for automation.
-- Human-oriented status and warnings are written to stderr where possible.
-- `spritz whoami` shows the active user plus the credential source.
+- `spritz auth login` is interactive and requires a TTY unless credentials are piped on stdin or passed via `--api-key`
+- `spritz auth device start` always writes JSON to stdout
+- `spritz auth device complete` always writes JSON to stdout
+- `spritz auth status` uses the normal CLI output modes, with CSV as the default
+- human-oriented status and warnings are written to stderr where possible
+- `SPRITZ_API_KEY` always overrides stored credentials
 
-Example `spritz whoami -o json` output:
+Example `spritz auth status -o json` output:
 
 ```json
 [
@@ -94,16 +93,47 @@ Example `spritz whoami -o json` output:
 ]
 ```
 
+## Security Guidance
+
+- prefer `SPRITZ_API_KEY` or secure stdin over `--api-key`
+- treat `--api-key ak_...` as a last resort; command-line arguments may end up in shell history and process inspection tools
+- credentials are stored in the system keychain by default
+- `--allow-file-storage` falls back to a machine-encrypted file when keychain storage is unavailable
+- only approved destinations and explicitly authorized payment flows should be used by agents
+
+Safer direct-key example:
+
+```bash
+printf '%s' "$SPRITZ_API_KEY" | spritz auth login
+```
+
 ## Logout
 
 ```bash
-spritz logout
-spritz logout --json
+spritz auth logout
+spritz auth logout --json
 ```
 
 Logout removes locally stored credentials only. It does not revoke the server-side API key. To revoke it, visit:
 
 `https://app.spritz.finance/settings/api-keys`
+
+## Why Device State Exists
+
+The device flow is split into two commands:
+
+1. `spritz auth device start`
+2. `spritz auth device complete`
+
+The first command receives temporary device authorization state from the API. The second command needs that state in order to finish polling and redeem the approved API key.
+
+The CLI stores this state in a file so parallel agent runs do not clobber one another.
+
+- by default, `start` generates a unique file path automatically
+- `complete` uses the only pending session when there is exactly one
+- if multiple pending sessions exist, the CLI requires `--device-state-file`
+
+This gives agents a simple default path without falling back to unsafe singleton state.
 
 ## Device Authorization Protocol
 

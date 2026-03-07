@@ -20,12 +20,12 @@ const (
 	accountName = "api_key"
 )
 
-var ErrNotAuthenticated = errors.New("not authenticated. Run 'spritz login' or set SPRITZ_API_KEY")
+var ErrNotAuthenticated = errors.New("not authenticated. Run 'spritz auth login' or set SPRITZ_API_KEY")
 
 type StorageMethod int
 
 const (
-	StorageEnv     StorageMethod = iota
+	StorageEnv StorageMethod = iota
 	StorageKeychain
 	StorageFile
 )

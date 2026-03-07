@@ -15,9 +15,6 @@ import (
 type LoginOptions struct {
 	AllowFileStorage bool
 	APIKey           string // If set, skip interactive prompts (works without TTY)
-	DeviceStart      bool   // Just initiate device flow and exit
-	DeviceComplete   bool   // Complete a previously started device flow
-	DeviceStateFile  string // Explicit state path for two-step device flow
 }
 
 type LoginResult struct {
@@ -36,38 +33,6 @@ type LoginResult struct {
 // Login runs the login flow. Interactive prompts require a TTY;
 // pass APIKey in opts to authenticate non-interactively (e.g. piped envs).
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
-	// Two-step device flow: start
-	if opts.DeviceStart {
-		if opts.DeviceStateFile == "" {
-			return nil, fmt.Errorf("--device-state-file is required with --device-start")
-		}
-		state, err := DeviceStart(ctx, opts.DeviceStateFile)
-		if err != nil {
-			return nil, err
-		}
-		return &LoginResult{
-			Mode:                    "device_start",
-			EnvVarActive:            os.Getenv("SPRITZ_API_KEY") != "",
-			UserCode:                state.UserCode,
-			VerificationURI:         state.VerificationURI,
-			VerificationURIComplete: state.VerificationURIComplete,
-			ExpiresAt:               state.ExpiresAt,
-			DeviceStateFile:         opts.DeviceStateFile,
-		}, nil
-	}
-
-	// Two-step device flow: complete
-	if opts.DeviceComplete {
-		if opts.DeviceStateFile == "" {
-			return nil, fmt.Errorf("--device-state-file is required with --device-complete")
-		}
-		token, err := DeviceComplete(ctx, opts.DeviceStateFile)
-		if err != nil {
-			return nil, err
-		}
-		return storeValidatedKey(token.APIKey, token.KeyID, opts.AllowFileStorage)
-	}
-
 	// Non-interactive: API key provided directly
 	if opts.APIKey != "" {
 		return loginWithKey(opts.APIKey, opts.AllowFileStorage)
@@ -81,7 +46,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		}
 		k := strings.TrimSpace(string(key))
 		if k == "" {
-			return nil, fmt.Errorf("login requires an interactive terminal, stdin, --api-key, or --device-start/--device-complete")
+			return nil, fmt.Errorf("login requires an interactive terminal, stdin, or --api-key")
 		}
 		return loginWithKey(k, opts.AllowFileStorage)
 	}
@@ -133,6 +98,51 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	}
 
 	return storeValidatedKey(apiKey, keyID, opts.AllowFileStorage)
+}
+
+func StartDeviceLogin(ctx context.Context, stateFile string) (*LoginResult, error) {
+	resolvedPath := stateFile
+	if resolvedPath == "" {
+		var err error
+		resolvedPath, err = NewDeviceStatePath()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	state, err := DeviceStart(ctx, resolvedPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoginResult{
+		Mode:                    "device_start",
+		EnvVarActive:            os.Getenv("SPRITZ_API_KEY") != "",
+		UserCode:                state.UserCode,
+		VerificationURI:         state.VerificationURI,
+		VerificationURIComplete: state.VerificationURIComplete,
+		ExpiresAt:               state.ExpiresAt,
+		DeviceStateFile:         resolvedPath,
+	}, nil
+}
+
+func CompleteDeviceLogin(ctx context.Context, stateFile string, allowFile bool) (*LoginResult, error) {
+	resolvedPath, err := ResolveDeviceStatePath(stateFile)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := DeviceComplete(ctx, resolvedPath)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := storeValidatedKey(token.APIKey, token.KeyID, allowFile)
+	if err != nil {
+		return nil, err
+	}
+	result.DeviceStateFile = resolvedPath
+	return result, nil
 }
 
 func loginWithKey(apiKey string, allowFile bool) (*LoginResult, error) {

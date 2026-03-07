@@ -31,47 +31,41 @@ The installer verifies Sigstore-signed release checksums before installing the b
 ### For Humans
 
 ```bash
-spritz login
-spritz whoami
+spritz auth login
+spritz auth status
 spritz bank-accounts list
 ```
 
 ### For Agents
 
 ```bash
-spritz login --device-start --device-state-file /tmp/spritz-device.json
-spritz login --device-complete --device-state-file /tmp/spritz-device.json --json
-spritz whoami -o json
-spritz bank-accounts list -o json
+spritz auth device start
+spritz auth device complete
+spritz auth status
+spritz bank-accounts list
 ```
+
+`spritz auth device start` returns JSON to stdout, including the auto-generated
+device state file path. `spritz auth device complete` uses the only pending
+session by default.
 
 ### For CI
 
 ```bash
 export SPRITZ_API_KEY=ak_...
-spritz whoami -o json
+spritz auth status
 ```
-
-## What Agents Can Do
-
-Today `spritz` supports agent-friendly access to:
-
-- authentication in terminals, headless runtimes, and CI
-- bank account discovery for approved off-ramp destinations
-- machine-readable command output for scripts and orchestration
-
-As the CLI expands, the goal is straightforward: let agents safely operate real
-Spritz payment workflows from the command line.
 
 ## Agent Notes
 
 If you are calling `spritz` from an agent or script:
 
-- prefer `-o json` when you need machine-readable output
-- prefer `SPRITZ_API_KEY` or the two-step device flow for non-interactive auth
-- prefer an explicit `--device-state-file` so parallel runs do not rely on hidden local state
+- keep the default CSV output for flat resource reads; it is compact and token-efficient
+- use JSON for auth handshakes and other object-shaped command results
+- prefer `SPRITZ_API_KEY` or `spritz auth device` for non-interactive auth
+- let `spritz auth device start` generate a unique state file unless your orchestrator needs an explicit path
 - expect human-oriented warnings and status text on stderr where possible
-- use `spritz whoami` to confirm which credential source is active
+- use `spritz auth status` to confirm which credential source is active
 
 ## Authentication
 
@@ -84,26 +78,37 @@ If you are calling `spritz` from an agent or script:
 ### Interactive Login
 
 ```bash
-spritz login
+spritz auth login
 ```
 
-This opens the browser-based device flow and stores credentials locally.
+This is the human-friendly login flow. It opens the browser-based device flow by
+default and stores credentials locally.
 
 ### Two-Step Device Auth
 
 ```bash
-spritz login --device-start --device-state-file /tmp/spritz-device.json
-spritz login --device-complete --device-state-file /tmp/spritz-device.json --json
+spritz auth device start
+spritz auth device complete
 ```
 
-`--device-start` writes machine-readable JSON to stdout. `--device-complete` uses
-the same state file to finish the flow.
+This is the preferred headless auth flow for agents.
+
+- `start` creates a unique pending device session automatically and returns JSON
+- `complete` finishes the only pending session by default
+- if multiple pending sessions exist, rerun `complete` with `--device-state-file`
+
+Example with explicit state path:
+
+```bash
+spritz auth device start --device-state-file /tmp/spritz-device.json
+spritz auth device complete --device-state-file /tmp/spritz-device.json
+```
 
 ### Environment Variable Auth
 
 ```bash
 export SPRITZ_API_KEY=ak_...
-spritz whoami -o json
+spritz auth status
 ```
 
 This is the preferred auth pattern for CI and secret-managed runtimes.
@@ -123,28 +128,31 @@ See `docs/cli-auth-spec.md` for the full auth and device-flow contract.
 
 ```bash
 # Show the active authenticated user
-spritz whoami
+spritz auth status
 
 # List bank accounts
 spritz bank-accounts list
 
-# Agent-friendly output
+# Agent-friendly JSON output when needed
 spritz bank-accounts list -o json
 
-# Pipeline-friendly output
+# Pipeline-friendly CSV output
 spritz bank-accounts list --no-header
 
 # Remove locally stored credentials
-spritz logout
+spritz auth logout
 ```
 
 ## Output Modes
 
 Most commands support:
 
-- `-o json` for agents and programmatic consumers
-- `-o csv` for shell pipelines and exports
+- `csv` by default for compact, agent-friendly tabular output
+- `-o json` for programmatic consumers and richer structured payloads
 - `-o table` for human-readable terminal output
+
+`spritz auth device start` and `spritz auth device complete` always return JSON,
+because they produce small structured auth handshakes rather than tabular data.
 
 ## Development
 

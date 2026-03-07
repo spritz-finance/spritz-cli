@@ -73,6 +73,14 @@ func DeviceAuth(ctx context.Context) (*DeviceTokenResponse, error) {
 // DeviceStart initiates the device flow, persists state, and returns immediately.
 // The caller should present the URL to the user, then later call DeviceComplete.
 func DeviceStart(ctx context.Context, stateFile string) (*DeviceState, error) {
+	if stateFile == "" {
+		var err error
+		stateFile, err = NewDeviceStatePath()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	baseURL := config.APIURL()
 
 	auth, err := requestDeviceCode(ctx, baseURL)
@@ -88,6 +96,7 @@ func DeviceStart(ctx context.Context, stateFile string) (*DeviceState, error) {
 		VerificationURI:         auth.VerificationURI,
 		VerificationURIComplete: auth.VerificationURIComplete,
 		Interval:                auth.Interval,
+		CreatedAt:               time.Now().UTC().Format(time.RFC3339),
 		ExpiresAt:               expiresAt.Format(time.RFC3339),
 	}
 
@@ -100,12 +109,20 @@ func DeviceStart(ctx context.Context, stateFile string) (*DeviceState, error) {
 
 // DeviceComplete loads persisted state and polls for approval.
 func DeviceComplete(ctx context.Context, stateFile string) (*DeviceTokenResponse, error) {
-	state, err := LoadDeviceState(stateFile)
+	resolvedPath, err := ResolveDeviceStatePath(stateFile)
+	if err != nil {
+		return nil, err
+	}
+
+	state, err := LoadDeviceState(resolvedPath)
 	if err != nil {
 		return nil, err
 	}
 	if state == nil {
-		return nil, fmt.Errorf("no pending device authorization at %q — run 'spritz login --device-start --device-state-file %s' first", stateFile, stateFile)
+		if stateFile == "" {
+			return nil, fmt.Errorf("no pending device authorization — run 'spritz auth device start' first")
+		}
+		return nil, fmt.Errorf("no pending device authorization at %q — run 'spritz auth device start --device-state-file %s' first", resolvedPath, resolvedPath)
 	}
 
 	baseURL := config.APIURL()
@@ -118,7 +135,7 @@ func DeviceComplete(ctx context.Context, stateFile string) (*DeviceTokenResponse
 		return nil, err
 	}
 
-	ClearDeviceState(stateFile)
+	ClearDeviceState(resolvedPath)
 	return token, nil
 }
 

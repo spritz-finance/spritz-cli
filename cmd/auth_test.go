@@ -40,8 +40,8 @@ func captureStdoutStderr(t *testing.T, fn func() error) (string, string, error) 
 
 	runErr := fn()
 
-	stdoutW.Close()
-	stderrW.Close()
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 
@@ -54,8 +54,8 @@ func captureStdoutStderr(t *testing.T, fn func() error) (string, string, error) 
 		t.Fatalf("read stderr: %v", err)
 	}
 
-	stdoutR.Close()
-	stderrR.Close()
+	_ = stdoutR.Close()
+	_ = stderrR.Close()
 
 	return string(stdout), string(stderr), runErr
 }
@@ -114,19 +114,23 @@ func sortJSONValue(v any) any {
 	}
 }
 
-func resetLoginFlags(t *testing.T) {
+func resetAuthLoginFlags(t *testing.T) {
 	t.Helper()
-	loginCmd.Flags().Set("api-key", "")
-	loginCmd.Flags().Set("json", "false")
-	loginCmd.Flags().Set("allow-file-storage", "false")
-	loginCmd.Flags().Set("device-start", "false")
-	loginCmd.Flags().Set("device-complete", "false")
-	loginCmd.Flags().Set("device-state-file", "")
+	_ = authLoginCmd.Flags().Set("api-key", "")
+	_ = authLoginCmd.Flags().Set("json", "false")
+	_ = authLoginCmd.Flags().Set("allow-file-storage", "false")
 }
 
-func resetLogoutFlags(t *testing.T) {
+func resetAuthLogoutFlags(t *testing.T) {
 	t.Helper()
-	logoutCmd.Flags().Set("json", "false")
+	_ = authLogoutCmd.Flags().Set("json", "false")
+}
+
+func resetAuthDeviceFlags(t *testing.T) {
+	t.Helper()
+	_ = authDeviceStartCmd.Flags().Set("device-state-file", "")
+	_ = authDeviceCompleteCmd.Flags().Set("device-state-file", "")
+	_ = authDeviceCompleteCmd.Flags().Set("allow-file-storage", "false")
 }
 
 func writeEncryptedCredentialFile(t *testing.T, configDir, apiKey string) {
@@ -160,16 +164,16 @@ func writeEncryptedCredentialFile(t *testing.T, configDir, apiKey string) {
 	}
 }
 
-func TestLoginCmdDeviceStartWritesJSONToStdout(t *testing.T) {
-	defer resetLoginFlags(t)
-	stateFile := filepath.Join(t.TempDir(), "device-state.json")
+func TestAuthDeviceStartWritesJSONToStdout(t *testing.T) {
+	defer resetAuthDeviceFlags(t)
+	configDir := t.TempDir()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/device/authorize" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"deviceCode":              "dc_secret",
 			"userCode":                "ABCD1234",
 			"verificationUri":         "https://app.spritz.finance/device",
@@ -181,16 +185,11 @@ func TestLoginCmdDeviceStartWritesJSONToStdout(t *testing.T) {
 	defer server.Close()
 
 	t.Setenv("SPRITZ_API_URL", server.URL)
-	loginCmd.SetContext(context.Background())
-	if err := loginCmd.Flags().Set("device-start", "true"); err != nil {
-		t.Fatal(err)
-	}
-	if err := loginCmd.Flags().Set("device-state-file", stateFile); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("SPRITZ_CONFIG_DIR", configDir)
+	authDeviceStartCmd.SetContext(context.Background())
 
 	stdout, stderr, err := captureStdoutStderr(t, func() error {
-		return loginCmd.RunE(loginCmd, nil)
+		return authDeviceStartCmd.RunE(authDeviceStartCmd, nil)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -203,17 +202,22 @@ func TestLoginCmdDeviceStartWritesJSONToStdout(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
 		t.Fatalf("stdout was not json: %v\n%s", err, stdout)
 	}
+	stateFile, _ := got["deviceStateFile"].(string)
 	got["deviceStateFile"] = "__STATE_FILE__"
 	got["expiresAt"] = "__EXPIRES_AT__"
 	normalized, err := json.Marshal(got)
 	if err != nil {
-		t.Fatalf("marshal normalized login start json: %v", err)
+		t.Fatalf("marshal normalized device start json: %v", err)
 	}
 	assertJSONGolden(t, string(normalized), "testdata/login_device_start.golden.json")
+
+	if stateFile == "" || !strings.HasPrefix(stateFile, configDir) {
+		t.Fatalf("expected generated device state file in config dir, got %q", stateFile)
+	}
 }
 
-func TestLoginCmdJSONDoesNotPrintHumanSuccessToStderr(t *testing.T) {
-	defer resetLoginFlags(t)
+func TestAuthLoginJSONDoesNotPrintHumanSuccessToStderr(t *testing.T) {
+	defer resetAuthLoginFlags(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/users/me" {
@@ -224,19 +228,19 @@ func TestLoginCmdJSONDoesNotPrintHumanSuccessToStderr(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{"email": "cmd@example.com", "firstName": "Cmd"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"email": "cmd@example.com", "firstName": "Cmd"})
 	}))
 	defer server.Close()
 
 	t.Setenv("SPRITZ_API_URL", server.URL)
 	t.Setenv("SPRITZ_CONFIG_DIR", t.TempDir())
-	loginCmd.SetContext(context.Background())
-	loginCmd.Flags().Set("api-key", "ak_valid")
-	loginCmd.Flags().Set("json", "true")
-	loginCmd.Flags().Set("allow-file-storage", "true")
+	authLoginCmd.SetContext(context.Background())
+	_ = authLoginCmd.Flags().Set("api-key", "ak_valid")
+	_ = authLoginCmd.Flags().Set("json", "true")
+	_ = authLoginCmd.Flags().Set("allow-file-storage", "true")
 
 	stdout, stderr, err := captureStdoutStderr(t, func() error {
-		return loginCmd.RunE(loginCmd, nil)
+		return authLoginCmd.RunE(authLoginCmd, nil)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -252,18 +256,18 @@ func TestLoginCmdJSONDoesNotPrintHumanSuccessToStderr(t *testing.T) {
 	got["storage"] = "__STORAGE__"
 	normalized, err := json.Marshal(got)
 	if err != nil {
-		t.Fatalf("marshal normalized login success json: %v", err)
+		t.Fatalf("marshal normalized login json: %v", err)
 	}
 	assertJSONGolden(t, string(normalized), "testdata/login_json_success.golden.json")
 }
 
-func TestLogoutCmdJSONNoStoredCredentials(t *testing.T) {
-	defer resetLogoutFlags(t)
+func TestAuthLogoutJSONNoStoredCredentials(t *testing.T) {
+	defer resetAuthLogoutFlags(t)
 	t.Setenv("SPRITZ_CONFIG_DIR", t.TempDir())
-	logoutCmd.Flags().Set("json", "true")
+	_ = authLogoutCmd.Flags().Set("json", "true")
 
 	stdout, stderr, err := captureStdoutStderr(t, func() error {
-		return logoutCmd.RunE(logoutCmd, nil)
+		return authLogoutCmd.RunE(authLogoutCmd, nil)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -274,7 +278,7 @@ func TestLogoutCmdJSONNoStoredCredentials(t *testing.T) {
 	assertJSONGolden(t, stdout, "testdata/logout_json_no_credentials.golden.json")
 }
 
-func TestWhoamiCmdJSONShowsEnvSource(t *testing.T) {
+func TestAuthStatusJSONShowsEnvSource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/users/me" {
 			w.WriteHeader(http.StatusNotFound)
@@ -284,7 +288,7 @@ func TestWhoamiCmdJSONShowsEnvSource(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{"email": "env@example.com", "firstName": "Env"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"email": "env@example.com", "firstName": "Env"})
 	}))
 	defer server.Close()
 
@@ -295,30 +299,14 @@ func TestWhoamiCmdJSONShowsEnvSource(t *testing.T) {
 	buf := &bytes.Buffer{}
 	format.Global = format.New("json", false, buf)
 
-	if err := whoamiCmd.RunE(whoamiCmd, nil); err != nil {
+	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var rows []map[string]string
-	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
-		t.Fatalf("output was not json: %v\n%s", err, buf.String())
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0]["source"] != "environment variable" {
-		t.Fatalf("expected environment variable source, got %q", rows[0]["source"])
-	}
-	if rows[0]["envOverride"] != "false" {
-		t.Fatalf("expected envOverride=false, got %q", rows[0]["envOverride"])
-	}
-	if rows[0]["storedCredentials"] != "false" {
-		t.Fatalf("expected storedCredentials=false, got %q", rows[0]["storedCredentials"])
-	}
 	assertJSONGolden(t, buf.String(), "testdata/whoami_env_source.golden.json")
 }
 
-func TestWhoamiCmdJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) {
+func TestAuthStatusJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/users/me" {
 			w.WriteHeader(http.StatusNotFound)
@@ -328,7 +316,7 @@ func TestWhoamiCmdJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{"email": "env@example.com", "firstName": "Env"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"email": "env@example.com", "firstName": "Env"})
 	}))
 	defer server.Close()
 
@@ -342,22 +330,9 @@ func TestWhoamiCmdJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) {
 	buf := &bytes.Buffer{}
 	format.Global = format.New("json", false, buf)
 
-	if err := whoamiCmd.RunE(whoamiCmd, nil); err != nil {
+	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var rows []map[string]string
-	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
-		t.Fatalf("output was not json: %v\n%s", err, buf.String())
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0]["envOverride"] != "true" {
-		t.Fatalf("expected envOverride=true, got %q", rows[0]["envOverride"])
-	}
-	if rows[0]["storedCredentials"] != "true" {
-		t.Fatalf("expected storedCredentials=true, got %q", rows[0]["storedCredentials"])
-	}
 	assertJSONGolden(t, buf.String(), "testdata/whoami_env_override.golden.json")
 }
