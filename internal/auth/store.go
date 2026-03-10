@@ -83,6 +83,8 @@ func GetAPIKeyWithSource() (string, StorageMethod, error) {
 func StoreAPIKey(apiKey string, allowFile bool) (StorageMethod, error) {
 	err := keyring.Set(serviceName, accountName, apiKey)
 	if err == nil {
+		// Remove any legacy encrypted file so the secret doesn't persist in both places.
+		os.Remove(credentialFilePath())
 		return StorageKeychain, nil
 	}
 
