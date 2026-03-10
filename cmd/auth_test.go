@@ -297,7 +297,9 @@ func TestAuthStatusJSONShowsEnvSource(t *testing.T) {
 	t.Setenv("SPRITZ_CONFIG_DIR", t.TempDir())
 
 	buf := &bytes.Buffer{}
+	old := format.Global
 	format.Global = format.New("json", false, buf)
+	defer func() { format.Global = old }()
 
 	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -328,7 +330,9 @@ func TestAuthStatusJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) 
 	t.Setenv("SPRITZ_CONFIG_DIR", configDir)
 
 	buf := &bytes.Buffer{}
+	old := format.Global
 	format.Global = format.New("json", false, buf)
+	defer func() { format.Global = old }()
 
 	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
