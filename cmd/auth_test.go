@@ -301,6 +301,7 @@ func TestAuthStatusJSONShowsEnvSource(t *testing.T) {
 	format.Global = format.New("json", false, buf)
 	defer func() { format.Global = old }()
 
+	authStatusCmd.SetContext(context.Background())
 	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -334,6 +335,7 @@ func TestAuthStatusJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) 
 	format.Global = format.New("json", false, buf)
 	defer func() { format.Global = old }()
 
+	authStatusCmd.SetContext(context.Background())
 	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

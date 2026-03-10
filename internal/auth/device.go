@@ -104,6 +104,13 @@ func readDeviceState(path string, clearInvalid bool) (*DeviceState, error) {
 		return nil, fmt.Errorf("device code expired for %q — cleared", path)
 	}
 
+	if state.DeviceCode == "" {
+		if clearInvalid {
+			ClearDeviceState(path)
+		}
+		return nil, fmt.Errorf("corrupt device auth state at %q: missing device code — cleared", path)
+	}
+
 	if state.CreatedAt == "" {
 		state.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
