@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spritz-finance/spritz-cli/cmd/bankaccounts"
+	"github.com/spritz-finance/spritz-cli/cmd/offrampquotes"
+	"github.com/spritz-finance/spritz-cli/cmd/offramps"
 	"github.com/spritz-finance/spritz-cli/internal/api"
 	"github.com/spritz-finance/spritz-cli/internal/auth"
 	"github.com/spritz-finance/spritz-cli/internal/config"
@@ -69,6 +71,8 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(bankaccounts.Cmd)
+	rootCmd.AddCommand(offramps.Cmd)
+	rootCmd.AddCommand(offrampquotes.Cmd)
 }
 
 func Execute() error {
