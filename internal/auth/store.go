@@ -20,12 +20,12 @@ const (
 	accountName = "api_key"
 )
 
-var ErrNotAuthenticated = errors.New("not authenticated. Run 'spritz login' or set SPRITZ_API_KEY")
+var ErrNotAuthenticated = errors.New("not authenticated. Run 'spritz auth login' or set SPRITZ_API_KEY")
 
 type StorageMethod int
 
 const (
-	StorageEnv     StorageMethod = iota
+	StorageEnv StorageMethod = iota
 	StorageKeychain
 	StorageFile
 )
@@ -83,6 +83,8 @@ func GetAPIKeyWithSource() (string, StorageMethod, error) {
 func StoreAPIKey(apiKey string, allowFile bool) (StorageMethod, error) {
 	err := keyring.Set(serviceName, accountName, apiKey)
 	if err == nil {
+		// Remove any legacy encrypted file so the secret doesn't persist in both places.
+		os.Remove(credentialFilePath())
 		return StorageKeychain, nil
 	}
 

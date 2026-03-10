@@ -211,7 +211,7 @@ func TestDeviceComplete_MissingStateFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "no pending device authorization at \""+path+"\" — run 'spritz login --device-start --device-state-file "+path+"' first" {
+	if err.Error() != "no pending device authorization at \""+path+"\" — run 'spritz auth device start --device-state-file "+path+"' first" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

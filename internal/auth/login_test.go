@@ -10,22 +10,14 @@ import (
 	"testing"
 )
 
-func TestLogin_DeviceStartRequiresStateFile(t *testing.T) {
-	_, err := Login(context.Background(), LoginOptions{DeviceStart: true})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if err.Error() != "--device-state-file is required with --device-start" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
+func TestCompleteDeviceLogin_NoPendingState(t *testing.T) {
+	t.Setenv("SPRITZ_CONFIG_DIR", t.TempDir())
 
-func TestLogin_DeviceCompleteRequiresStateFile(t *testing.T) {
-	_, err := Login(context.Background(), LoginOptions{DeviceComplete: true})
+	_, err := CompleteDeviceLogin(context.Background(), "", false)
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "--device-state-file is required with --device-complete" {
+	if !strings.Contains(err.Error(), "no pending device authorization") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -40,7 +32,7 @@ func TestLogin_ReadsAPIKeyFromStdin(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		json.NewEncoder(w).Encode(UserInfo{Email: "stdin@example.com", FirstName: "Stdin"})
+		_ = json.NewEncoder(w).Encode(UserInfo{Email: "stdin@example.com", FirstName: "Stdin"})
 	}))
 	defer server.Close()
 
@@ -61,7 +53,7 @@ func TestLogin_ReadsAPIKeyFromStdin(t *testing.T) {
 	os.Stdin = r
 	defer func() {
 		os.Stdin = oldStdin
-		r.Close()
+		_ = r.Close()
 	}()
 
 	result, err := Login(context.Background(), LoginOptions{AllowFileStorage: true})

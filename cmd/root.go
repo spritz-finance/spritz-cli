@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spritz-finance/spritz-cli/cmd/bankaccounts"
@@ -28,9 +29,9 @@ func SetVersionInfo(v, c, d string) {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "spritz",
-	Short: "CLI for the Spritz payments API",
-	Long:  "spritz is a fast, agent-optimized CLI for interacting with the Spritz platform.",
+	Use:           "spritz",
+	Short:         "CLI for the Spritz payments API",
+	Long:          "spritz is a fast, agent-optimized CLI for interacting with the Spritz platform.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -43,7 +44,8 @@ var rootCmd = &cobra.Command{
 
 		// Non-blocking update check (skip for version/update commands)
 		name := cmd.Name()
-		if name != "version" && name != "update" && name != "login" && name != "logout" {
+		commandPath := cmd.CommandPath()
+		if name != "version" && name != "update" && !strings.HasPrefix(commandPath, "spritz auth") {
 			go func() {
 				if latest := update.Check(version); latest != "" {
 					updateNotice = latest
@@ -65,9 +67,7 @@ func init() {
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(updateCmd)
-	rootCmd.AddCommand(loginCmd)
-	rootCmd.AddCommand(logoutCmd)
-	rootCmd.AddCommand(whoamiCmd)
+	rootCmd.AddCommand(authCmd)
 	rootCmd.AddCommand(bankaccounts.Cmd)
 }
 

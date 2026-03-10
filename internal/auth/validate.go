@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,9 +18,9 @@ type UserInfo struct {
 
 // ValidateAPIKey checks the key against GET /v1/users/me and returns user info.
 // Uses a self-contained HTTP call to avoid circular dependency with the api package.
-func ValidateAPIKey(apiKey string) (*UserInfo, error) {
+func ValidateAPIKey(ctx context.Context, apiKey string) (*UserInfo, error) {
 	baseURL := strings.TrimRight(config.APIURL(), "/")
-	req, err := http.NewRequest("GET", baseURL+"/v1/users/me", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/v1/users/me", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

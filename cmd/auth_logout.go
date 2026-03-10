@@ -9,19 +9,19 @@ import (
 	"github.com/spritz-finance/spritz-cli/internal/auth"
 )
 
-var logoutCmd = &cobra.Command{
+var authLogoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Remove locally stored Spritz credentials",
-	Long: `Removes credentials from keychain and encrypted file.
+	Long: `Remove credentials from keychain and encrypted file.
 
-Note: this does not revoke the API key on the server. To revoke it,
-visit https://app.spritz.finance/settings/api-keys.`,
+This does not revoke the API key on the server. To revoke it, visit
+https://app.spritz.finance/settings/api-keys.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		envSet := os.Getenv("SPRITZ_API_KEY") != ""
 		hadStored := auth.HasStoredCredentials()
 
-		if os.Getenv("SPRITZ_API_KEY") != "" {
+		if envSet {
 			fmt.Fprintln(os.Stderr, "Warning: SPRITZ_API_KEY environment variable is set.")
 			fmt.Fprintln(os.Stderr, "Commands will continue to authenticate via the env var.")
 			fmt.Fprintln(os.Stderr, "Unset it to fully log out.")
@@ -31,8 +31,8 @@ visit https://app.spritz.finance/settings/api-keys.`,
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"removedStoredCredentials": false,
-					"envVarActive":            envSet,
-					"serverRevocationURL":     "https://app.spritz.finance/settings/api-keys",
+					"envVarActive":             envSet,
+					"serverRevocationURL":      "https://app.spritz.finance/settings/api-keys",
 				})
 			}
 			fmt.Println("No stored credentials found.")
@@ -46,8 +46,8 @@ visit https://app.spritz.finance/settings/api-keys.`,
 		if jsonOut {
 			return json.NewEncoder(os.Stdout).Encode(map[string]any{
 				"removedStoredCredentials": true,
-				"envVarActive":            envSet,
-				"serverRevocationURL":     "https://app.spritz.finance/settings/api-keys",
+				"envVarActive":             envSet,
+				"serverRevocationURL":      "https://app.spritz.finance/settings/api-keys",
 			})
 		}
 
@@ -58,5 +58,5 @@ visit https://app.spritz.finance/settings/api-keys.`,
 }
 
 func init() {
-	logoutCmd.Flags().Bool("json", false, "Print structured JSON output for automation")
+	authLogoutCmd.Flags().Bool("json", false, "Print structured JSON output for automation")
 }
