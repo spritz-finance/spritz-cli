@@ -30,6 +30,7 @@ Examples:
 
   # JSON output
   spritz off-ramps list -o json`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := api.NewFromEnv()
 		if err != nil {
@@ -42,6 +43,10 @@ Examples:
 		chain, _ := cmd.Flags().GetString("chain")
 		accountID, _ := cmd.Flags().GetString("account-id")
 		sort, _ := cmd.Flags().GetString("sort")
+
+		if limit < 1 || limit > 100 {
+			return fmt.Errorf("--limit must be between 1 and 100")
+		}
 
 		result, err := client.ListOffRamps(&api.ListOffRampsParams{
 			Limit:     limit,
