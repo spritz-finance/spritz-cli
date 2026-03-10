@@ -127,7 +127,10 @@ func DeviceComplete(ctx context.Context, stateFile string) (*DeviceTokenResponse
 
 	baseURL := config.APIURL()
 
-	expiresAt, _ := time.Parse(time.RFC3339, state.ExpiresAt)
+	expiresAt, err := time.Parse(time.RFC3339, state.ExpiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("invalid expiresAt %q in device state: %w", state.ExpiresAt, err)
+	}
 	expiresIn := int(time.Until(expiresAt).Seconds())
 
 	token, err := pollUntilComplete(ctx, baseURL, state.DeviceCode, state.Interval, expiresIn)
