@@ -35,7 +35,7 @@ type LoginResult struct {
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	// Non-interactive: API key provided directly
 	if opts.APIKey != "" {
-		return loginWithKey(opts.APIKey, opts.AllowFileStorage)
+		return loginWithKey(ctx, opts.APIKey, opts.AllowFileStorage)
 	}
 
 	// API key from stdin pipe (non-TTY, no --api-key flag)
@@ -48,7 +48,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		if k == "" {
 			return nil, fmt.Errorf("login requires an interactive terminal, stdin, or --api-key")
 		}
-		return loginWithKey(k, opts.AllowFileStorage)
+		return loginWithKey(ctx, k, opts.AllowFileStorage)
 	}
 
 	// Interactive flow
@@ -97,7 +97,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		return nil, fmt.Errorf("no API key provided")
 	}
 
-	return storeValidatedKey(apiKey, keyID, opts.AllowFileStorage)
+	return storeValidatedKey(ctx, apiKey, keyID, opts.AllowFileStorage)
 }
 
 func StartDeviceLogin(ctx context.Context, stateFile string) (*LoginResult, error) {
@@ -137,7 +137,7 @@ func CompleteDeviceLogin(ctx context.Context, stateFile string, allowFile bool) 
 		return nil, err
 	}
 
-	result, err := storeValidatedKey(token.APIKey, token.KeyID, allowFile)
+	result, err := storeValidatedKey(ctx, token.APIKey, token.KeyID, allowFile)
 	if err != nil {
 		return nil, err
 	}
@@ -145,12 +145,12 @@ func CompleteDeviceLogin(ctx context.Context, stateFile string, allowFile bool) 
 	return result, nil
 }
 
-func loginWithKey(apiKey string, allowFile bool) (*LoginResult, error) {
-	return storeValidatedKey(apiKey, "", allowFile)
+func loginWithKey(ctx context.Context, apiKey string, allowFile bool) (*LoginResult, error) {
+	return storeValidatedKey(ctx, apiKey, "", allowFile)
 }
 
-func storeValidatedKey(apiKey, keyID string, allowFile bool) (*LoginResult, error) {
-	user, err := ValidateAPIKey(apiKey)
+func storeValidatedKey(ctx context.Context, apiKey, keyID string, allowFile bool) (*LoginResult, error) {
+	user, err := ValidateAPIKey(ctx, apiKey)
 	if err != nil {
 		return nil, err
 	}

@@ -21,7 +21,7 @@ and overrides stored credentials.`,
 			return err
 		}
 
-		user, err := auth.ValidateAPIKey(apiKey)
+		user, err := auth.ValidateAPIKey(cmd.Context(), apiKey)
 		if err != nil {
 			return err
 		}

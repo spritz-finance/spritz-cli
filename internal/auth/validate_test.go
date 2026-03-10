@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,7 @@ func TestValidateAPIKey_Success(t *testing.T) {
 	os.Setenv("SPRITZ_API_URL", server.URL)
 	defer os.Unsetenv("SPRITZ_API_URL")
 
-	user, err := ValidateAPIKey("ak_valid")
+	user, err := ValidateAPIKey(context.Background(), "ak_valid")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,7 +43,7 @@ func TestValidateAPIKey_Unauthorized(t *testing.T) {
 	os.Setenv("SPRITZ_API_URL", server.URL)
 	defer os.Unsetenv("SPRITZ_API_URL")
 
-	_, err := ValidateAPIKey("ak_bad")
+	_, err := ValidateAPIKey(context.Background(), "ak_bad")
 	if err == nil {
 		t.Fatal("expected error for invalid key")
 	}
@@ -60,7 +61,7 @@ func TestValidateAPIKey_ServerError(t *testing.T) {
 	os.Setenv("SPRITZ_API_URL", server.URL)
 	defer os.Unsetenv("SPRITZ_API_URL")
 
-	_, err := ValidateAPIKey("ak_test")
+	_, err := ValidateAPIKey(context.Background(), "ak_test")
 	if err == nil {
 		t.Fatal("expected error for server error")
 	}
