@@ -26,3 +26,20 @@ func (c *Client) ListBankAccounts() ([]BankAccount, error) {
 	}
 	return decodeJSON[[]BankAccount](resp)
 }
+
+func (c *Client) CreateBankAccount(body map[string]interface{}) (*BankAccount, error) {
+	resp, err := c.do("POST", "/v1/bank-accounts/", body)
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSONPtr[BankAccount](resp)
+}
+
+func (c *Client) DeleteBankAccount(accountID string) error {
+	resp, err := c.do("DELETE", "/v1/bank-accounts/"+accountID, nil)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}

@@ -96,3 +96,20 @@ func decodeJSON[T any](resp *http.Response) (T, error) {
 	}
 	return v, nil
 }
+
+func decodeJSONPtr[T any](resp *http.Response) (*T, error) {
+	v, err := decodeJSON[T](resp)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func decodeJSONRaw(resp *http.Response) (json.RawMessage, error) {
+	defer resp.Body.Close()
+	var raw json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return raw, nil
+}
