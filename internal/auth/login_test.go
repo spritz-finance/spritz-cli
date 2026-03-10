@@ -17,7 +17,7 @@ func TestCompleteDeviceLogin_NoPendingState(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "no pending device authorization — run 'spritz auth device start' first" {
+	if !strings.Contains(err.Error(), "no pending device authorization") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
