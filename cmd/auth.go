@@ -33,10 +33,6 @@ func writeJSON(value any) error {
 }
 
 func printStoredCredentialResult(result *auth.LoginResult) {
-	if result == nil {
-		return
-	}
-
 	switch result.Mode {
 	case "skipped":
 		fmt.Fprintln(os.Stderr, "Login cancelled. Stored credentials unchanged.")
