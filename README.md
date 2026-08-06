@@ -1,8 +1,6 @@
 # spritz-cli
 
-`spritz` is a CLI for Spritz fiat rails. It supports human-operated account
-workflows and gives agent tools a credential broker that keeps API keys off
-command lines and out of plaintext configuration files.
+`spritz` is a CLI for Spritz fiat rails and human-operated account workflows.
 
 ## Install
 
@@ -51,16 +49,22 @@ spritz auth device complete
 URL, and expiration. `complete` uses the only pending session unless
 `--device-state-file` is supplied.
 
-Then configure the MCP client to run `spritz auth mcp --access user` as its
-stdio server command. Do not run that broker as a one-time setup command: it is
-the long-lived MCP process and normally appears to wait while its client is not
-sending protocol messages.
+`spritz auth mcp --access user` is intentionally fail-closed. This release does
+not pass a keychain credential to an MCP package launched through an ambient
+Node/npm runtime: a same-user process or modified executable/cache could read
+the key, so that design is not a credential-security boundary.
 
-The broker validates the active key as an End User credential, derives an
-allowlisted Sandbox or Production API origin from the CLI configuration, clears
-ambient secrets and runtime injection overrides, and passes the key only in the
-fixed, version-pinned MCP child process environment. It never places the key on
-argv or writes it to MCP configuration.
+Until Spritz ships an integrity-verifiable packaged broker, use the read-only
+MCP server only in an operator-controlled disposable Sandbox/test environment.
+Treat the process as able to read its injected credential, scope the account to
+non-production test data, and revoke or rotate the credential after the
+session. Do not use this interim path with a Production End User account.
+
+```bash
+SPRITZ_API_KEY="${DISPOSABLE_SANDBOX_TEST_KEY}" \
+SPRITZ_API_BASE_URL="https://sandbox.spritz.finance" \
+npx -y @spritz-finance/mcp-server@0.3.2
+```
 
 ## Developer workspace automation
 
@@ -71,16 +75,14 @@ terms as an authorized person, and follow the
 [Developer Access guide](https://docs.spritz.finance/guides/developer-access) for
 Sandbox HMAC credentials. An End User Bearer key is never a fallback.
 
-For CI, a secret manager may explicitly inject `SPRITZ_API_KEY`:
+Do not inject an organization HMAC credential into an agent-controlled process.
+Until a scoped Developer workspace grant exists, have an operator run
+credentialed integration tests outside the agent's control, or use a disposable
+Sandbox credential and rotate it immediately after the test. An End User Bearer
+key is never a Developer-workspace fallback.
 
-```bash
-export SPRITZ_API_KEY="${CI_SECRET_VALUE}"
-export SPRITZ_API_BASE_URL="https://sandbox.spritz.finance"
-npx -y @spritz-finance/mcp-server@0.3.2
-```
-
-Do not pass a key with `--api-key` in automation; argv may be captured in shell
-history or process listings.
+Do not pass any key with `--api-key` in automation; argv may be captured in
+shell history or process listings.
 
 ## Common commands
 

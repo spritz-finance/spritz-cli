@@ -110,28 +110,26 @@ spritz auth status
 
 This is the preferred pattern when a secret manager can inject environment variables directly.
 
-### Configuring agent tooling without a plaintext key
+### MCP credential boundary
 
-```yaml
-command: spritz
-args: ["auth", "mcp", "--access", "user"]
+```bash
+spritz auth mcp --access user
 ```
 
-The `user` broker validates the active credential against the End User account
-endpoint, derives an allowlisted API origin, removes inherited credential and
-other ambient secrets plus Node/npm injection overrides, and launches only the
-reviewed, version-pinned Spritz MCP package.
-The credential exists only in that fixed child process's environment. It is not
-placed on argv, printed, or written to MCP configuration.
+The command fails closed. The CLI does not inject an End User key into a package
+launched through a dynamically resolved Node/npm executable or mutable user
+cache. Sanitizing environment variables and pinning an npm version does not make
+that child a security boundary against same-user local code.
 
-The MCP client launches this long-lived stdio command. Running it manually as a
-setup step appears to wait because it is listening for MCP protocol messages.
+Until a bundled, integrity-verifiable broker is available, an operator may run
+the read-only MCP package with an explicitly injected credential only in a
+disposable Sandbox/test environment. The operator must treat the process as
+able to read the credential and revoke or rotate it after the session. This
+interim path is not approved for a Production End User account.
+
 Developer workspace-agent access remains unavailable; locally asserted metadata
 cannot prove an HMAC workspace grant, and the CLI never falls back to the End
 User flow.
-
-Secret-managed CI may currently launch the MCP server directly with an explicit
-`SPRITZ_API_KEY`; that is not the local device-grant flow.
 
 ## CLI Behavior
 
@@ -158,7 +156,9 @@ Example `spritz auth status -o json` output:
 
 ## Security Guidance
 
-- prefer a human-approved End User device grant and configure the MCP client to launch `spritz auth mcp --access user` for local account-agent tooling
+- do not treat a dynamically launched local child as able to keep a credential secret from same-user code
+- keep `spritz auth mcp --access user` fail-closed until the packaged-child integrity boundary ships
+- use the read-only MCP package only with an operator-controlled, disposable Sandbox/test credential and rotate or revoke it after the session
 - prefer `SPRITZ_API_KEY` from a secret manager or secure stdin over `--api-key` in CI
 - treat `--api-key ak_...` as a last resort; command-line arguments may end up in shell history and process inspection tools
 - credentials are stored in the system keychain by default

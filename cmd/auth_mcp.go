@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spritz-finance/spritz-cli/internal/auth"
@@ -10,14 +9,15 @@ import (
 
 var authMCPCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "Start the Spritz MCP server through the credential broker",
-	Long: `Start the reviewed Spritz MCP server with the active credential injected
-only into that child process's environment. The credential is not placed on
-argv or written to a plaintext file. The broker does not accept an arbitrary
-child command, so an agent cannot use it to print the credential.
+	Short: "Report the unavailable MCP credential-broker boundary",
+	Long: `The MCP broker is fail-closed in this release. The CLI will not inject an
+End User credential into a child resolved through an ambient Node/npm runtime.
+That path cannot be treated as a secret boundary against same-user local code.
 
-Use --access user for the current End User account-agent tool surface. Developer
-workspace credentials are established separately through the Developer Console.`,
+Until an integrity-verifiable packaged child is available, use only the
+read-only MCP server in an operator-controlled disposable Sandbox/test
+environment and revoke or rotate the credential after the session. Developer
+workspace credentials remain a separate, unavailable grant.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accessValue, _ := cmd.Flags().GetString("access")
@@ -28,7 +28,7 @@ workspace credentials are established separately through the Developer Console.`
 		if err != nil {
 			return err
 		}
-		return auth.RunMCPServer(cmd.Context(), os.Stdin, os.Stdout, os.Stderr, access)
+		return auth.RunMCPServer(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), access)
 	},
 }
 
