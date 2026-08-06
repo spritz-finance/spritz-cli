@@ -14,9 +14,10 @@ entry point. It currently fails closed before making a network request. It may
 be enabled only when the platform supplies the workspace-aware grant contract
 listed under **Developer Access platform dependency** below.
 
-A human workspace administrator accepts the Developer Terms and approves
-scopes. An AI agent may request a device code and poll for completion, but it may
-not accept terms, perform business verification, or own a Production credential.
+A future Developer workspace grant requires a human workspace administrator to
+accept the Developer Terms and approve scopes. An AI agent may request a device
+code and poll for completion, but it may not accept terms, perform business
+verification, or own a Production credential.
 
 The CLI has two auth shapes:
 
@@ -57,7 +58,7 @@ Default `spritz auth login` opens a browser-based device flow and stores the res
 ### Agents and Headless Environments
 
 ```bash
-spritz auth device start
+spritz auth device start --access user
 spritz auth device complete
 ```
 
@@ -111,19 +112,24 @@ This is the preferred pattern when a secret manager can inject environment varia
 ### Starting agent tooling without a plaintext key
 
 ```bash
-spritz auth mcp
+spritz auth mcp --access user
 ```
 
-`auth mcp` currently returns `ErrDeveloperAccessNotEnabled` before reading a
-credential or launching a child. Locally asserted metadata cannot prove a
-workspace grant, so the CLI must wait for the issuance and introspection
-contract below.
+The `user` broker validates the active credential against the End User account
+endpoint, derives an allowlisted API origin, removes inherited credential and
+Node/npm injection overrides, and launches only the reviewed Spritz MCP package.
+The credential exists only in that fixed child process's environment. It is not
+placed on argv, printed, or written to MCP configuration.
 
-When the platform contract exists, this command is the reserved broker entry
-point. It must inject only an introspected, workspace-scoped credential into a
-fixed Spritz MCP child process. It must never place the key on argv, create a
-plaintext credential file, accept arbitrary executables, trust environment
-labels as proof of scope, or fall back to the user-account device flow.
+Developer workspace-agent access is a separate reserved mode:
+
+```bash
+spritz auth mcp --access developer
+```
+
+It returns `ErrDeveloperAccessNotEnabled` before reading a credential or
+launching a child. Locally asserted metadata cannot prove an HMAC workspace
+grant, and the CLI never falls back to the End User flow.
 
 Secret-managed CI may currently launch the MCP server directly with an explicit
 `SPRITZ_API_KEY`; that is not the local device-grant flow.
@@ -153,7 +159,7 @@ Example `spritz auth status -o json` output:
 
 ## Security Guidance
 
-- prefer a human-approved device grant plus `spritz auth mcp` for local agent tooling
+- prefer a human-approved End User device grant plus `spritz auth mcp --access user` for local account-agent tooling
 - prefer `SPRITZ_API_KEY` from a secret manager or secure stdin over `--api-key` in CI
 - treat `--api-key ak_...` as a last resort; command-line arguments may end up in shell history and process inspection tools
 - credentials are stored in the system keychain by default
@@ -175,7 +181,7 @@ spritz auth logout --json
 
 Logout removes locally stored credentials only. It does not revoke the server-side API key. To revoke it, visit:
 
-`https://console.spritz.finance/settings/api-keys`
+`https://app.spritz.finance/api-keys`
 
 ## Why Device State Exists
 
@@ -331,9 +337,10 @@ document all of the following as one coherent contract:
    preliminary business verification plus compliance approval and hard limits;
    Production requires full business verification plus executed commercial
    agreements.
-6. A token response containing stable `workspaceId`, `environment`, `scopes`,
-   `keyId`, expiry, and key name fields, with a validation/introspection endpoint
-   that returns the same principal metadata.
+6. A token response containing the environment-bound Integrator public key and
+   HMAC secret plus stable `workspaceId`, `environment`, `scopes`, `keyId`,
+   expiry, and key name fields, with a validation/introspection endpoint that
+   returns the same principal metadata without returning the secret.
 7. Revocation, rotation, audit events, rate limiting, idempotency, and a guarantee
    that a device code cannot be promoted across environments.
 

@@ -15,34 +15,18 @@ binary.
 
 ## Access model
 
-Developer Access and Production are deliberately separate:
+Spritz has two distinct agent principals:
 
-- **Developer Access** is a pre-production access path, not a pricing tier or
-  commercial deal.
-- **Sandbox** uses simulated funds and can begin after a human accepts the
-  Developer Terms for the legal entity.
-- **Live Test** uses real money only within approved limits after preliminary
-  business verification and compliance approval.
-- **Production** is a separate commercial service that requires full business
-  verification and signed commercial agreements.
+- An **End User account agent** acts on the approving person's own Spritz
+  account with a scoped Bearer credential. The current CLI, MCP server, and
+  off-ramp tools use this path.
+- A **Developer workspace agent** helps a business build an embedded
+  integration with organization-owned HMAC credentials. That separate device
+  grant is not deployed and must not borrow an End User credential.
 
-An AI agent cannot accept legal terms, complete business verification, or own a
-Production credential. A human workspace administrator approves a scoped device
-grant; the agent receives only the resulting capability through the local
-credential broker.
-
-The current platform device endpoint authorizes an individual Spritz user
-account at `app.spritz.finance`. It is not a Developer Access workspace grant.
-The CLI exposes the future mode explicitly and fails closed instead of silently
-substituting the user flow:
-
-```bash
-spritz auth device start --access developer
-```
-
-Until the Developer Console endpoints are deployed, this returns a clear
-not-enabled error and directs the human administrator to
-`https://console.spritz.finance`.
+The `--access` value names the credential owner. It is not an environment or a
+pricing tier. Commands that broker a credential require the principal to be
+explicit.
 
 ## Existing user-account flow
 
@@ -55,40 +39,39 @@ spritz auth status
 spritz bank-accounts list
 ```
 
-For a headless host, split approval from completion:
+For a headless host or local account agent, split approval from completion and
+then launch the MCP server through the fixed broker:
 
 ```bash
-spritz auth device start
+spritz auth device start --access user
 # A human opens the returned URL and approves the requested user-account scopes.
 spritz auth device complete
-spritz auth status
+spritz auth mcp --access user
 ```
 
 `start` returns JSON containing a unique state-file path, user code, verification
 URL, and expiration. `complete` uses the only pending session unless
 `--device-state-file` is supplied.
 
-## Developer agent credential broker
+The broker validates the active key as an End User credential, derives an
+allowlisted Sandbox or Production API origin from the CLI configuration, clears
+credential and Node/npm injection overrides, and passes the key only in the
+fixed MCP child process environment. It never places the key on argv or writes
+it to MCP configuration.
 
-Once the workspace grant contract is deployed, a human administrator completes
-the Developer Access device flow and then starts agent tooling through the
-broker:
+## Future Developer workspace-agent flow
+
+The future entry points are reserved explicitly:
 
 ```bash
 spritz auth device start --access developer
 spritz auth device complete
-spritz auth mcp
+spritz auth mcp --access developer
 ```
 
-Until the platform contract is deployed, both `--access developer` and
-`auth mcp` return the typed not-enabled error before reading or launching
-anything. That is intentional: locally asserted metadata cannot prove a
-workspace grant and must not promote an End User key.
-
-Once the platform supplies issuance and introspection, `auth mcp` will inject the
-verified scoped credential only into a fixed Spritz MCP child process. It will
-not put the key on argv, write a plaintext credential file, or accept an
-arbitrary child command that could print the credential.
+Both commands fail closed until the Developer Console can issue and attest a
+workspace-, environment-, scope-, and expiry-bound HMAC grant. An End User
+Bearer key is never a fallback.
 
 For CI, a secret manager may explicitly inject `SPRITZ_API_KEY`:
 
@@ -114,8 +97,8 @@ Device handshake commands always emit JSON.
 
 Stored credentials use the system keychain by default. `--allow-file-storage`
 enables a machine-encrypted fallback only when a keychain is unavailable.
-`SPRITZ_API_KEY` always overrides stored credentials. Revoke keys in the
-[Developer Console](https://console.spritz.finance/settings/api-keys).
+`SPRITZ_API_KEY` always overrides stored credentials. Revoke End User account
+keys at [app.spritz.finance/api-keys](https://app.spritz.finance/api-keys).
 
 ## Development
 

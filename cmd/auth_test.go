@@ -134,6 +134,34 @@ func resetAuthDeviceFlags(t *testing.T) {
 	_ = authDeviceCompleteCmd.Flags().Set("allow-file-storage", "false")
 }
 
+func resetAuthMCPFlags(t *testing.T) {
+	t.Helper()
+	_ = authMCPCmd.Flags().Set("access", "")
+}
+
+func TestAuthMCPRequiresExplicitAccess(t *testing.T) {
+	defer resetAuthMCPFlags(t)
+	_, _, err := captureStdoutStderr(t, func() error {
+		return authMCPCmd.RunE(authMCPCmd, nil)
+	})
+	if err == nil || !strings.Contains(err.Error(), "--access is required") {
+		t.Fatalf("expected explicit access error, got %v", err)
+	}
+}
+
+func TestAuthMCPDeveloperAccessFailsClosed(t *testing.T) {
+	defer resetAuthMCPFlags(t)
+	t.Setenv("SPRITZ_DEVELOPER_CONSOLE_URL", "https://console.example.test")
+	_ = authMCPCmd.Flags().Set("access", "developer")
+
+	_, _, err := captureStdoutStderr(t, func() error {
+		return authMCPCmd.RunE(authMCPCmd, nil)
+	})
+	if err == nil || !strings.Contains(err.Error(), "developer access device grants are not enabled") {
+		t.Fatalf("expected Developer Access to fail closed, got %v", err)
+	}
+}
+
 func TestAuthDeviceStartDeveloperAccessFailsClosed(t *testing.T) {
 	defer resetAuthDeviceFlags(t)
 	t.Setenv("SPRITZ_DEVELOPER_CONSOLE_URL", "https://console.example.test")
@@ -282,15 +310,26 @@ func TestAuthLogoutJSONNoStoredCredentials(t *testing.T) {
 	defer resetAuthLogoutFlags(t)
 	t.Setenv("SPRITZ_CONFIG_DIR", t.TempDir())
 	_ = authLogoutCmd.Flags().Set("json", "true")
+	deleteCalled := false
+	deps := logoutDependencies{
+		hasStoredCredentials: func() bool { return false },
+		deleteAPIKey: func() error {
+			deleteCalled = true
+			return nil
+		},
+	}
 
 	stdout, stderr, err := captureStdoutStderr(t, func() error {
-		return authLogoutCmd.RunE(authLogoutCmd, nil)
+		return runAuthLogout(authLogoutCmd, deps)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+	if deleteCalled {
+		t.Fatal("logout attempted to delete a credential after the no-credentials check")
 	}
 	assertJSONGolden(t, stdout, "testdata/logout_json_no_credentials.golden.json")
 }
@@ -319,7 +358,7 @@ func TestAuthStatusJSONShowsEnvSource(t *testing.T) {
 	defer func() { format.Global = old }()
 
 	authStatusCmd.SetContext(context.Background())
-	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
+	if err := runAuthStatus(authStatusCmd, func() bool { return false }); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -353,7 +392,7 @@ func TestAuthStatusJSONShowsEnvOverrideWhenStoredCredentialsExist(t *testing.T) 
 	defer func() { format.Global = old }()
 
 	authStatusCmd.SetContext(context.Background())
-	if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
+	if err := runAuthStatus(authStatusCmd, func() bool { return true }); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

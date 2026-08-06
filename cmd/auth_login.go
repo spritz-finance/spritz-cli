@@ -12,7 +12,7 @@ var authLoginCmd = &cobra.Command{
 
 This command is the human-friendly login path. For headless agents, prefer:
 
-  spritz auth device start
+  spritz auth device start --access user
   spritz auth device complete`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		apiKey, _ := cmd.Flags().GetString("api-key")
