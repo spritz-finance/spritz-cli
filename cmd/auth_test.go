@@ -129,8 +129,25 @@ func resetAuthLogoutFlags(t *testing.T) {
 func resetAuthDeviceFlags(t *testing.T) {
 	t.Helper()
 	_ = authDeviceStartCmd.Flags().Set("device-state-file", "")
+	_ = authDeviceStartCmd.Flags().Set("access", "user")
 	_ = authDeviceCompleteCmd.Flags().Set("device-state-file", "")
 	_ = authDeviceCompleteCmd.Flags().Set("allow-file-storage", "false")
+}
+
+func TestAuthDeviceStartDeveloperAccessFailsClosed(t *testing.T) {
+	defer resetAuthDeviceFlags(t)
+	t.Setenv("SPRITZ_DEVELOPER_CONSOLE_URL", "https://console.example.test")
+	_ = authDeviceStartCmd.Flags().Set("access", "developer")
+
+	_, _, err := captureStdoutStderr(t, func() error {
+		return authDeviceStartCmd.RunE(authDeviceStartCmd, nil)
+	})
+	if err == nil {
+		t.Fatal("expected Developer Access to fail closed")
+	}
+	if !strings.Contains(err.Error(), "developer access device grants are not enabled") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func writeEncryptedCredentialFile(t *testing.T, configDir, apiKey string) {

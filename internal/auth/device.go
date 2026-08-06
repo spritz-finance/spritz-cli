@@ -17,13 +17,14 @@ import (
 
 // DeviceState is persisted between device auth start and complete.
 type DeviceState struct {
-	DeviceCode              string `json:"deviceCode"`
-	UserCode                string `json:"userCode"`
-	VerificationURI         string `json:"verificationUri"`
-	VerificationURIComplete string `json:"verificationUriComplete"`
-	Interval                int    `json:"interval"`
-	CreatedAt               string `json:"createdAt"`
-	ExpiresAt               string `json:"expiresAt"`
+	Access                  AccessMode `json:"access,omitempty"`
+	DeviceCode              string     `json:"deviceCode"`
+	UserCode                string     `json:"userCode"`
+	VerificationURI         string     `json:"verificationUri"`
+	VerificationURIComplete string     `json:"verificationUriComplete"`
+	Interval                int        `json:"interval"`
+	CreatedAt               string     `json:"createdAt"`
+	ExpiresAt               string     `json:"expiresAt"`
 }
 
 type PendingDeviceState struct {

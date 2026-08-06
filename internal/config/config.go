@@ -25,6 +25,7 @@ func Init() {
 
 	viper.SetDefault("output", "csv")
 	viper.SetDefault("api_url", "https://platform.spritz.finance")
+	viper.SetDefault("developer_console_url", "https://console.spritz.finance")
 
 	viper.SetEnvPrefix("SPRITZ")
 	viper.AutomaticEnv()
@@ -48,4 +49,14 @@ func APIURL() string {
 		return u
 	}
 	return viper.GetString("api_url")
+}
+
+func DeveloperConsoleURL() string {
+	if u := os.Getenv("SPRITZ_DEVELOPER_CONSOLE_URL"); u != "" {
+		return u
+	}
+	if u := viper.GetString("developer_console_url"); u != "" {
+		return u
+	}
+	return "https://console.spritz.finance"
 }

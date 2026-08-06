@@ -2,6 +2,22 @@
 
 `spritz` supports interactive, headless, and fully non-interactive authentication.
 
+## Principal boundary
+
+The deployed `/v1/device/*` endpoints authorize an **End User/user account** at
+`app.spritz.finance`. They do not authorize a Developer Console workspace or an
+integrator legal entity. The CLI must not treat the two principals as
+interchangeable.
+
+`spritz auth device start --access developer` is the typed Developer Access
+entry point. It currently fails closed before making a network request. It may
+be enabled only when the platform supplies the workspace-aware grant contract
+listed under **Developer Access platform dependency** below.
+
+A human workspace administrator accepts the Developer Terms and approves
+scopes. An AI agent may request a device code and poll for completion, but it may
+not accept terms, perform business verification, or own a Production credential.
+
 The CLI has two auth shapes:
 
 - human-friendly commands under `spritz auth login`
@@ -59,6 +75,8 @@ spritz auth device complete
 }
 ```
 
+This command defaults to `--access user` for backward compatibility.
+
 `spritz auth device complete` completes the only pending session by default. If multiple pending sessions exist, the CLI requires an explicit `--device-state-file`.
 
 Example with explicit state path:
@@ -90,6 +108,26 @@ spritz auth status
 
 This is the preferred pattern when a secret manager can inject environment variables directly.
 
+### Starting agent tooling without a plaintext key
+
+```bash
+spritz auth mcp
+```
+
+`auth mcp` currently returns `ErrDeveloperAccessNotEnabled` before reading a
+credential or launching a child. Locally asserted metadata cannot prove a
+workspace grant, so the CLI must wait for the issuance and introspection
+contract below.
+
+When the platform contract exists, this command is the reserved broker entry
+point. It must inject only an introspected, workspace-scoped credential into a
+fixed Spritz MCP child process. It must never place the key on argv, create a
+plaintext credential file, accept arbitrary executables, trust environment
+labels as proof of scope, or fall back to the user-account device flow.
+
+Secret-managed CI may currently launch the MCP server directly with an explicit
+`SPRITZ_API_KEY`; that is not the local device-grant flow.
+
 ## CLI Behavior
 
 - `spritz auth login` is interactive and requires a TTY unless credentials are piped on stdin or passed via `--api-key`
@@ -115,7 +153,8 @@ Example `spritz auth status -o json` output:
 
 ## Security Guidance
 
-- prefer `SPRITZ_API_KEY` or secure stdin over `--api-key`
+- prefer a human-approved device grant plus `spritz auth mcp` for local agent tooling
+- prefer `SPRITZ_API_KEY` from a secret manager or secure stdin over `--api-key` in CI
 - treat `--api-key ak_...` as a last resort; command-line arguments may end up in shell history and process inspection tools
 - credentials are stored in the system keychain by default
 - `--allow-file-storage` falls back to a machine-encrypted file when keychain storage is unavailable
@@ -136,7 +175,7 @@ spritz auth logout --json
 
 Logout removes locally stored credentials only. It does not revoke the server-side API key. To revoke it, visit:
 
-`https://app.spritz.finance/settings/api-keys`
+`https://console.spritz.finance/settings/api-keys`
 
 ## Why Device State Exists
 
@@ -274,3 +313,29 @@ Error responses use RFC 9457 problem details (400):
 | `authorization_pending` | User has not approved yet; keep polling |
 | `slow_down` | Polling too fast; increase interval by 5s |
 | `expired_token` | Device code expired; start over |
+
+## Developer Access platform dependency
+
+Before the CLI can enable `--access developer`, the platform must provide and
+document all of the following as one coherent contract:
+
+1. Workspace-aware authorize and token endpoints that cannot issue an End User
+   key by fallback.
+2. A verification URL under `https://console.spritz.finance`.
+3. A human-authenticated approval screen that identifies the legal entity,
+   workspace, requested environment (**Sandbox**, **Live Test**, or
+   **Production**), scopes, expiry, and requesting client.
+4. Server-side evidence that the human accepted the current Developer Terms for
+   that legal entity before any Sandbox key is issued.
+5. Server-enforced entitlements: Sandbox is simulated; Live Test requires
+   preliminary business verification plus compliance approval and hard limits;
+   Production requires full business verification plus executed commercial
+   agreements.
+6. A token response containing stable `workspaceId`, `environment`, `scopes`,
+   `keyId`, expiry, and key name fields, with a validation/introspection endpoint
+   that returns the same principal metadata.
+7. Revocation, rotation, audit events, rate limiting, idempotency, and a guarantee
+   that a device code cannot be promoted across environments.
+
+Until that contract exists, Developer Access returns
+`ErrDeveloperAccessNotEnabled`; callers must not retry through the user mode.

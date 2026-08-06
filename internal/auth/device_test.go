@@ -11,6 +11,7 @@ import (
 func TestSaveAndLoadDeviceState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "device-state.json")
 	state := &DeviceState{
+		Access:                  AccessUser,
 		DeviceCode:              "dc_secret",
 		UserCode:                "ABCD1234",
 		VerificationURI:         "https://app.spritz.finance/device",
@@ -33,6 +34,28 @@ func TestSaveAndLoadDeviceState(t *testing.T) {
 	}
 	if loaded.DeviceCode != state.DeviceCode {
 		t.Fatalf("expected device code %q, got %q", state.DeviceCode, loaded.DeviceCode)
+	}
+	if loaded.Access != AccessUser {
+		t.Fatalf("expected access %q, got %q", AccessUser, loaded.Access)
+	}
+}
+
+func TestLegacyDeviceStateDefaultsToUserAccess(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-device-state.json")
+	state := &DeviceState{
+		DeviceCode: "dc_secret",
+		ExpiresAt:  time.Now().Add(time.Minute).UTC().Format(time.RFC3339),
+	}
+	if err := SaveDeviceState(path, state); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	loaded, err := LoadDeviceState(path)
+	if err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	if loaded.Access != "" {
+		t.Fatalf("legacy access should remain empty and be treated as user, got %q", loaded.Access)
 	}
 }
 

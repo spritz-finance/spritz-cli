@@ -26,6 +26,7 @@ func init() {
 	authCmd.AddCommand(authDeviceCmd)
 	authDeviceCmd.AddCommand(authDeviceStartCmd)
 	authDeviceCmd.AddCommand(authDeviceCompleteCmd)
+	authCmd.AddCommand(authMCPCmd)
 }
 
 func writeJSON(value any) error {

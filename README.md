@@ -1,22 +1,8 @@
 # spritz-cli
 
-`spritz` is the CLI that gives your agents access to your Spritz account.
-
-With `spritz`, an agent can move beyond wallet-only actions and use real fiat rails:
-authenticate, inspect approved bank destinations, create off-ramp quotes, and
-coordinate crypto-to-fiat payouts through Spritz.
-
-If your agent can control a wallet, `spritz` gives it a path to move funds into
-the banking system through your Spritz account.
-
-## Why It Matters
-
-Most agent tooling stops at crypto rails. Agents can read data, call APIs, and
-sign onchain transactions, but they usually cannot reach fiat payout systems.
-
-`spritz` closes that gap. It gives agents a scriptable interface to your Spritz
-account so they can participate in real payment workflows, not just crypto-native
-ones.
+`spritz` is a CLI for Spritz fiat rails. It supports human-operated account
+workflows and gives agent tools a credential broker that keeps API keys off
+command lines and out of plaintext configuration files.
 
 ## Install
 
@@ -24,38 +10,44 @@ ones.
 curl -fsSL https://spritz.finance/install | bash
 ```
 
-The installer verifies Sigstore-signed release checksums before installing the binary.
+The installer verifies Sigstore-signed release checksums before installing the
+binary.
 
-## Breaking Auth Change
+## Access model
 
-The auth command surface has changed.
+Developer Access and Production are deliberately separate:
 
-Old commands:
+- **Developer Access** is a pre-production access path, not a pricing tier or
+  commercial deal.
+- **Sandbox** uses simulated funds and can begin after a human accepts the
+  Developer Terms for the legal entity.
+- **Live Test** uses real money only within approved limits after preliminary
+  business verification and compliance approval.
+- **Production** is a separate commercial service that requires full business
+  verification and signed commercial agreements.
+
+An AI agent cannot accept legal terms, complete business verification, or own a
+Production credential. A human workspace administrator approves a scoped device
+grant; the agent receives only the resulting capability through the local
+credential broker.
+
+The current platform device endpoint authorizes an individual Spritz user
+account at `app.spritz.finance`. It is not a Developer Access workspace grant.
+The CLI exposes the future mode explicitly and fails closed instead of silently
+substituting the user flow:
 
 ```bash
-spritz login
-spritz logout
-spritz whoami
+spritz auth device start --access developer
 ```
 
-New commands:
+Until the Developer Console endpoints are deployed, this returns a clear
+not-enabled error and directs the human administrator to
+`https://console.spritz.finance`.
 
-```bash
-spritz auth login
-spritz auth logout
-spritz auth status
-```
+## Existing user-account flow
 
-For headless agents, prefer:
-
-```bash
-spritz auth device start
-spritz auth device complete
-```
-
-## Quickstart
-
-### For Humans
+The existing user flow remains available for a person managing their own Spritz
+account:
 
 ```bash
 spritz auth login
@@ -63,136 +55,75 @@ spritz auth status
 spritz bank-accounts list
 ```
 
-### For Agents
+For a headless host, split approval from completion:
 
 ```bash
 spritz auth device start
+# A human opens the returned URL and approves the requested user-account scopes.
 spritz auth device complete
 spritz auth status
-spritz bank-accounts list
 ```
 
-`spritz auth device start` returns JSON to stdout, including the auto-generated
-device state file path. `spritz auth device complete` uses the only pending
-session by default.
+`start` returns JSON containing a unique state-file path, user code, verification
+URL, and expiration. `complete` uses the only pending session unless
+`--device-state-file` is supplied.
 
-### For CI
+## Developer agent credential broker
 
-```bash
-export SPRITZ_API_KEY=ak_...
-spritz auth status
-```
-
-## Agent Notes
-
-If you are calling `spritz` from an agent or script:
-
-- keep the default CSV output for flat resource reads; it is compact and token-efficient
-- use JSON for auth handshakes and other object-shaped command results
-- prefer `SPRITZ_API_KEY` or `spritz auth device` for non-interactive auth
-- let `spritz auth device start` generate a unique state file unless your orchestrator needs an explicit path
-- expect human-oriented warnings and status text on stderr where possible
-- use `spritz auth status` to confirm which credential source is active
-
-## Authentication
-
-`spritz` supports three auth patterns:
-
-1. Interactive browser login
-2. Two-step device auth for agents and headless environments
-3. `SPRITZ_API_KEY` for CI and secret managers
-
-### Interactive Login
+Once the workspace grant contract is deployed, a human administrator completes
+the Developer Access device flow and then starts agent tooling through the
+broker:
 
 ```bash
-spritz auth login
-```
-
-This is the human-friendly login flow. It opens the browser-based device flow by
-default and stores credentials locally.
-
-### Two-Step Device Auth
-
-```bash
-spritz auth device start
+spritz auth device start --access developer
 spritz auth device complete
+spritz auth mcp
 ```
 
-This is the preferred headless auth flow for agents.
+Until the platform contract is deployed, both `--access developer` and
+`auth mcp` return the typed not-enabled error before reading or launching
+anything. That is intentional: locally asserted metadata cannot prove a
+workspace grant and must not promote an End User key.
 
-- `start` creates a unique pending device session automatically and returns JSON
-- `complete` finishes the only pending session by default
-- if multiple pending sessions exist, rerun `complete` with `--device-state-file`
+Once the platform supplies issuance and introspection, `auth mcp` will inject the
+verified scoped credential only into a fixed Spritz MCP child process. It will
+not put the key on argv, write a plaintext credential file, or accept an
+arbitrary child command that could print the credential.
 
-Example with explicit state path:
+For CI, a secret manager may explicitly inject `SPRITZ_API_KEY`:
 
 ```bash
-spritz auth device start --device-state-file /tmp/spritz-device.json
-spritz auth device complete --device-state-file /tmp/spritz-device.json
+export SPRITZ_API_KEY="${CI_SECRET_VALUE}"
+npx -y @spritz-finance/mcp-server
 ```
 
-### Environment Variable Auth
+Do not pass a key with `--api-key` in automation; argv may be captured in shell
+history or process listings.
+
+## Common commands
 
 ```bash
-export SPRITZ_API_KEY=ak_...
 spritz auth status
-```
-
-This is the preferred auth pattern for CI and secret-managed runtimes.
-
-### Security Notes
-
-- prefer `SPRITZ_API_KEY` from a secrets manager for CI and automation
-- prefer stdin over `--api-key` when passing a key directly, since argv may be captured in shell history or process inspection tools
-- stored credentials live in the system keychain by default
-- use `--allow-file-storage` only when keychain access is unavailable
-- `SPRITZ_API_KEY` always takes precedence over stored credentials
-- only approved destinations and explicitly authorized payment flows should be used by agents
-
-See `docs/cli-auth-spec.md` for the full auth and device-flow contract.
-
-## Common Commands
-
-```bash
-# Show the active authenticated user
-spritz auth status
-
-# List bank accounts
 spritz bank-accounts list
-
-# Agent-friendly JSON output when needed
 spritz bank-accounts list -o json
-
-# Pipeline-friendly CSV output
-spritz bank-accounts list --no-header
-
-# Remove locally stored credentials
 spritz auth logout
 ```
 
-## Output Modes
+Most commands default to compact CSV, with `-o json` and `-o table` available.
+Device handshake commands always emit JSON.
 
-Most commands support:
-
-- `csv` by default for compact, agent-friendly tabular output
-- `-o json` for programmatic consumers and richer structured payloads
-- `-o table` for human-readable terminal output
-
-`spritz auth device start` and `spritz auth device complete` always return JSON,
-because they produce small structured auth handshakes rather than tabular data.
+Stored credentials use the system keychain by default. `--allow-file-storage`
+enables a machine-encrypted fallback only when a keychain is unavailable.
+`SPRITZ_API_KEY` always overrides stored credentials. Revoke keys in the
+[Developer Console](https://console.spritz.finance/settings/api-keys).
 
 ## Development
-
-Run the test suite locally with:
 
 ```bash
 make test
 ```
 
-If `go` is not already on your `PATH`, the Makefile falls back to `mise exec -- go`.
+If `go` is not on `PATH`, the Makefile falls back to `mise exec -- go`.
 
-## Documentation
-
-- auth and device flow: `docs/cli-auth-spec.md`
-- test workflow: `.github/workflows/test.yml`
-- release workflow: `.github/workflows/release.yml`
+See [`docs/cli-auth-spec.md`](docs/cli-auth-spec.md) for the device protocol,
+credential precedence, and platform contract.

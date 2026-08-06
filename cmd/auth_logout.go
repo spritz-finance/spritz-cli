@@ -15,7 +15,7 @@ var authLogoutCmd = &cobra.Command{
 	Long: `Remove credentials from keychain and encrypted file.
 
 This does not revoke the API key on the server. To revoke it, visit
-https://app.spritz.finance/settings/api-keys.`,
+https://console.spritz.finance/settings/api-keys.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		envSet := os.Getenv("SPRITZ_API_KEY") != ""
@@ -32,7 +32,7 @@ https://app.spritz.finance/settings/api-keys.`,
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"removedStoredCredentials": false,
 					"envVarActive":             envSet,
-					"serverRevocationURL":      "https://app.spritz.finance/settings/api-keys",
+					"serverRevocationURL":      "https://console.spritz.finance/settings/api-keys",
 				})
 			}
 			fmt.Println("No stored credentials found.")
@@ -47,12 +47,12 @@ https://app.spritz.finance/settings/api-keys.`,
 			return json.NewEncoder(os.Stdout).Encode(map[string]any{
 				"removedStoredCredentials": true,
 				"envVarActive":             envSet,
-				"serverRevocationURL":      "https://app.spritz.finance/settings/api-keys",
+				"serverRevocationURL":      "https://console.spritz.finance/settings/api-keys",
 			})
 		}
 
 		fmt.Println("Stored credentials removed.")
-		fmt.Println("To revoke the API key server-side, visit https://app.spritz.finance/settings/api-keys")
+		fmt.Println("To revoke the API key server-side, visit https://console.spritz.finance/settings/api-keys")
 		return nil
 	},
 }

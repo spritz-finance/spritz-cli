@@ -101,6 +101,17 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 }
 
 func StartDeviceLogin(ctx context.Context, stateFile string) (*LoginResult, error) {
+	return StartDeviceLoginForAccess(ctx, stateFile, AccessUser)
+}
+
+func StartDeviceLoginForAccess(ctx context.Context, stateFile string, access AccessMode) (*LoginResult, error) {
+	if access == AccessDeveloper {
+		return nil, developerAccessNotEnabled()
+	}
+	if access != AccessUser {
+		return nil, fmt.Errorf("unsupported access mode %q", access)
+	}
+
 	resolvedPath := stateFile
 	if resolvedPath == "" {
 		var err error
@@ -113,6 +124,10 @@ func StartDeviceLogin(ctx context.Context, stateFile string) (*LoginResult, erro
 	state, err := DeviceStart(ctx, resolvedPath)
 	if err != nil {
 		return nil, err
+	}
+	state.Access = access
+	if err := SaveDeviceState(resolvedPath, state); err != nil {
+		return nil, fmt.Errorf("failed to save device access mode: %w", err)
 	}
 
 	return &LoginResult{
@@ -130,6 +145,13 @@ func CompleteDeviceLogin(ctx context.Context, stateFile string, allowFile bool) 
 	resolvedPath, err := ResolveDeviceStatePath(stateFile)
 	if err != nil {
 		return nil, err
+	}
+	state, err := LoadDeviceState(resolvedPath)
+	if err != nil {
+		return nil, err
+	}
+	if state != nil && state.Access == AccessDeveloper {
+		return nil, developerAccessNotEnabled()
 	}
 
 	token, err := DeviceComplete(ctx, resolvedPath)
