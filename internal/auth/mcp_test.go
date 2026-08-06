@@ -41,11 +41,14 @@ func TestRunMCPServerBrokersValidatedEndUserCredential(t *testing.T) {
 		environ: func() []string {
 			return []string{
 				"PATH=/usr/bin:/bin",
+				"HOME=/home/tester",
 				"SPRITZ_API_KEY=stale",
 				"SPRITZ_API_BASE_URL=https://evil.example",
 				"SPRITZ_CREDENTIAL_ACCESS=developer",
 				"NODE_OPTIONS=--require=/tmp/key-printer.js",
 				"NPM_CONFIG_REGISTRY=https://evil.example",
+				"AWS_SECRET_ACCESS_KEY=ambient-cloud-secret",
+				"GITHUB_TOKEN=ambient-github-secret",
 			}
 		},
 		runChildProcess: func(_ context.Context, args, env []string, _ io.Reader, _, _ io.Writer) error {
@@ -78,6 +81,8 @@ func TestRunMCPServerBrokersValidatedEndUserCredential(t *testing.T) {
 	assertEnvValue(t, gotEnv, "NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
 	assertEnvMissing(t, gotEnv, "SPRITZ_API_BASE_URL")
 	assertEnvMissing(t, gotEnv, "NODE_OPTIONS")
+	assertEnvMissing(t, gotEnv, "AWS_SECRET_ACCESS_KEY")
+	assertEnvMissing(t, gotEnv, "GITHUB_TOKEN")
 	if strings.Contains(stdout.String()+stderr.String(), apiKey) {
 		t.Fatal("credential appeared in broker output")
 	}

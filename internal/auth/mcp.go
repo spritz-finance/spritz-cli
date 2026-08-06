@@ -11,7 +11,34 @@ import (
 	"github.com/spritz-finance/spritz-cli/internal/config"
 )
 
-const mcpPackage = "@spritz-finance/mcp-server"
+// Pin the reviewed broker target. A mutable dist-tag would let a newly published
+// package receive an account credential before this CLI release reviewed it.
+const mcpPackage = "@spritz-finance/mcp-server@0.3.2"
+
+var mcpChildEnvironmentAllowlist = map[string]struct{}{
+	"APPDATA":         {},
+	"COLORTERM":       {},
+	"COMSPEC":         {},
+	"FORCE_COLOR":     {},
+	"HOME":            {},
+	"LANG":            {},
+	"LC_ALL":          {},
+	"LOCALAPPDATA":    {},
+	"LOGNAME":         {},
+	"NO_COLOR":        {},
+	"PATH":            {},
+	"PATHEXT":         {},
+	"SHELL":           {},
+	"SYSTEMROOT":      {},
+	"TEMP":            {},
+	"TERM":            {},
+	"TMP":             {},
+	"TMPDIR":          {},
+	"USER":            {},
+	"USERPROFILE":     {},
+	"XDG_CACHE_HOME":  {},
+	"XDG_RUNTIME_DIR": {},
+}
 
 type mcpDependencies struct {
 	getAPIKey       func() (string, StorageMethod, error)
@@ -74,19 +101,13 @@ func runMCPServer(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 }
 
 func accountAgentChildEnvironment(parent []string, apiKey string, storage StorageMethod, endpoint config.AccountAgentEndpoint) []string {
-	env := make([]string, 0, len(parent)+9)
+	env := make([]string, 0, len(mcpChildEnvironmentAllowlist)+9)
 	for _, entry := range parent {
 		name, _, _ := strings.Cut(entry, "=")
 		upper := strings.ToUpper(name)
-		if upper == "SPRITZ_API_KEY" ||
-			upper == "SPRITZ_API_BASE_URL" ||
-			strings.HasPrefix(upper, "SPRITZ_CREDENTIAL_") ||
-			upper == "NODE_OPTIONS" ||
-			upper == "NODE_PATH" ||
-			strings.HasPrefix(upper, "NPM_CONFIG_") {
-			continue
+		if _, ok := mcpChildEnvironmentAllowlist[upper]; ok || strings.HasPrefix(upper, "LC_") {
+			env = append(env, entry)
 		}
-		env = append(env, entry)
 	}
 
 	return append(env,

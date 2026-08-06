@@ -17,12 +17,12 @@ argv or written to a plaintext file. The broker does not accept an arbitrary
 child command, so an agent cannot use it to print the credential.
 
 Use --access user for the current End User account-agent tool surface. Developer
-workspace-agent access is a separate future grant and fails closed.`,
+workspace credentials are established separately through the Developer Console.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accessValue, _ := cmd.Flags().GetString("access")
 		if accessValue == "" {
-			return fmt.Errorf("--access is required: choose user or developer")
+			return fmt.Errorf("--access is required: use user for current End User account tooling")
 		}
 		access, err := auth.ParseAccessMode(accessValue)
 		if err != nil {
@@ -33,5 +33,5 @@ workspace-agent access is a separate future grant and fails closed.`,
 }
 
 func init() {
-	authMCPCmd.Flags().String("access", "", "Credential owner: user or developer (required)")
+	authMCPCmd.Flags().String("access", "", "Credential owner; current supported value: user (required)")
 }

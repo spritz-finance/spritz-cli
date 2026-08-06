@@ -29,5 +29,5 @@ automatically and returns its path in the JSON response.`,
 
 func init() {
 	authDeviceStartCmd.Flags().String("device-state-file", "", "Path to the device authorization state file; defaults to an auto-generated unique path")
-	authDeviceStartCmd.Flags().String("access", string(auth.AccessUser), "Grant owner: user or developer (Developer Access fails closed until platform support is enabled)")
+	authDeviceStartCmd.Flags().String("access", string(auth.AccessUser), "Grant owner; current supported value: user")
 }
